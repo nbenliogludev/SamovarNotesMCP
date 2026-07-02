@@ -9,6 +9,11 @@ export default defineConfig({
     plugins: [externalizeDepsPlugin()]
   },
   renderer: {
-    plugins: [react()]
+    plugins: [react()],
+    server: {
+      host: "127.0.0.1",
+      port: 5173,
+      strictPort: true
+    }
   }
 });
