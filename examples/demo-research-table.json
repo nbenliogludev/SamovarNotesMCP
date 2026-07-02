@@ -1,0 +1,56 @@
+{
+  "title": "Italy Summer Travel Research",
+  "summary": "A demo research table for testing Notion database creation without calling OpenAI.",
+  "columns": [
+    {
+      "name": "Place",
+      "type": "title"
+    },
+    {
+      "name": "Region",
+      "type": "rich_text"
+    },
+    {
+      "name": "Best Season",
+      "type": "select"
+    },
+    {
+      "name": "Budget",
+      "type": "select"
+    },
+    {
+      "name": "Short Description",
+      "type": "rich_text"
+    },
+    {
+      "name": "Worth Visiting",
+      "type": "checkbox"
+    }
+  ],
+  "rows": [
+    {
+      "Place": "Florence",
+      "Region": "Tuscany",
+      "Best Season": "Summer",
+      "Budget": "Medium",
+      "Short Description": "Renaissance art, walkable historic streets, and classic Tuscan food.",
+      "Worth Visiting": true
+    },
+    {
+      "Place": "Amalfi Coast",
+      "Region": "Campania",
+      "Best Season": "Early Summer",
+      "Budget": "High",
+      "Short Description": "Dramatic coastal towns, sea views, and scenic boat trips.",
+      "Worth Visiting": true
+    },
+    {
+      "Place": "Bologna",
+      "Region": "Emilia-Romagna",
+      "Best Season": "Summer",
+      "Budget": "Medium",
+      "Short Description": "Food-focused city with porticoes, markets, and a strong local feel.",
+      "Worth Visiting": true
+    }
+  ]
+}
