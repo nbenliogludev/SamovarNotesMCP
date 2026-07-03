@@ -11,10 +11,12 @@ This repository now contains the first runnable scaffold:
 - npm workspace monorepo
 - Electron + React + Vite desktop app shell
 - Notion connection screen with OAuth-required UI
+- Multi-Notion workspace list with active workspace selection
+- Electron deep-link callback handling for `samovar-notes-mcp://notion/callback`
 - shared `packages/core` contracts and schemas
 - local `packages/mcp-server` scaffold with registered MCP tool names
 
-Notion and OpenAI calls are intentionally mocked or placeholder-only in this branch. They will be implemented in the next focused branches.
+Notion token exchange and OpenAI calls are intentionally backend/mock placeholder-only in this branch. They will be implemented in the next focused branches.
 
 ## Product
 
@@ -32,18 +34,21 @@ Notion and OpenAI calls are intentionally mocked or placeholder-only in this bra
 - Shared core package for desktop and MCP flows
 - Safe local settings with no hardcoded secrets
 - Required Notion OAuth workspace connection
-- OAuth-ready architecture for backend token exchange
+- Multi-workspace Notion OAuth state in the desktop app
+- OAuth architecture for backend token exchange
 
 ## MVP User Flow
 
 1. Open the Electron desktop app.
 2. Connect a Notion workspace through OAuth.
-3. Enter an OpenAI API key.
-4. Enter a target Notion parent page ID.
-5. Write a research prompt.
-6. Generate structured research data with OpenAI.
-7. Create a Notion database or page through shared tool handlers.
-8. Show the created Notion URL in the app.
+3. Add more Notion workspaces if needed.
+4. Select the active Notion workspace.
+5. Enter an OpenAI API key.
+6. Enter a target Notion parent page ID.
+7. Write a research prompt.
+8. Generate structured research data with OpenAI.
+9. Create a Notion database or page through shared tool handlers.
+10. Show the created Notion URL in the app.
 
 Example prompt:
 
@@ -142,9 +147,10 @@ Notion OAuth is the required workspace connection path.
 1. Create a public Notion integration in the Notion developer dashboard.
 2. Configure the OAuth redirect URI from `.env.example`.
 3. Add the OAuth client ID to `.env`.
-4. Open the Notion parent page where generated pages/databases should be created.
-5. Copy the parent page ID from the Notion page URL.
-6. Add the parent page ID in the desktop app settings screen after OAuth sign-in.
+4. Configure `NOTION_OAUTH_TOKEN_EXCHANGE_URL` to point to a backend endpoint that exchanges a Notion OAuth `code` for workspace tokens.
+5. Open the Notion parent page where generated pages/databases should be created.
+6. Copy the parent page ID from the Notion page URL.
+7. Add the parent page ID in the desktop app settings screen after OAuth sign-in.
 
 OAuth token exchange should use a backend service. Do not store a Notion OAuth client secret in Electron.
 
@@ -158,6 +164,7 @@ OPENAI_MODEL=gpt-4.1-mini
 NOTION_PARENT_PAGE_ID=
 NOTION_OAUTH_CLIENT_ID=
 NOTION_OAUTH_REDIRECT_URI=samovar-notes-mcp://notion/callback
+NOTION_OAUTH_TOKEN_EXCHANGE_URL=
 ```
 
 The MCP server will read configuration from environment variables. The desktop app will store user settings locally and safely.
@@ -168,6 +175,8 @@ The Electron app should include:
 
 - `SettingsScreen`
   - Required Notion OAuth sign-in entry point
+  - Connected Notion workspace list
+  - Active Notion workspace selector
   - OpenAI API key input
   - Parent Notion page ID input
   - Save settings action
@@ -333,12 +342,28 @@ The service should request strict JSON only. If the installed OpenAI SDK support
 
 ## Notion OAuth Path
 
-The MVP treats Notion OAuth as the required workspace connection. OAuth support lives behind a `NotionAuthService` interface with placeholders for:
+The MVP treats Notion OAuth as the required workspace connection. The Electron app opens Notion OAuth, receives `samovar-notes-mcp://notion/callback`, verifies OAuth state, and stores connected workspace metadata.
+
+The token exchange must happen behind `NOTION_OAUTH_TOKEN_EXCHANGE_URL`. That backend endpoint should accept:
+
+```json
+{
+  "code": "temporary-notion-code",
+  "state": "oauth-state",
+  "redirectUri": "samovar-notes-mcp://notion/callback"
+}
+```
+
+It should return the Notion OAuth token payload, including `access_token`, `refresh_token`, `workspace_id`, `workspace_name`, `workspace_icon`, and `bot_id`.
+
+The renderer receives workspace metadata only. Token values are kept in the Electron main process store and encrypted with Electron `safeStorage` when the OS keychain backend is available.
+
+OAuth support lives behind a `NotionAuthService` interface with placeholders for:
 
 - Generate authorization URL
 - Handle callback
 - Exchange code for access token
-- Store workspace token
+- Store multiple workspace tokens
 
 The OAuth client secret must live on a backend token exchange service, not in the Electron app.
 
