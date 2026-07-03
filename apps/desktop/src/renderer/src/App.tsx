@@ -1,4 +1,15 @@
-import { CheckCircle2, Database, ExternalLink, KeyRound, Play, Settings, Sparkles } from "lucide-react";
+import {
+  ArrowRight,
+  CheckCircle2,
+  Database,
+  ExternalLink,
+  KeyRound,
+  Link2,
+  LockKeyhole,
+  Play,
+  Settings,
+  Sparkles
+} from "lucide-react";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 
 type AppInfo = {
@@ -16,26 +27,67 @@ type GeneratedPreview = {
   rowCount: number;
 };
 
+type AuthMode = "oauth" | "token";
+type Screen = "connect" | "workspace";
+
 const samplePrompt =
   "Research the 10 best places to visit in Italy in summer and create a ranked Notion table with place, region, best season, budget, short description, and why it is worth visiting.";
 
 export function App() {
   const [appInfo, setAppInfo] = useState<AppInfo | null>(null);
+  const [screen, setScreen] = useState<Screen>("connect");
+  const [authMode, setAuthMode] = useState<AuthMode>("oauth");
+  const [notionConnected, setNotionConnected] = useState(false);
   const [openAiKey, setOpenAiKey] = useState("");
   const [notionToken, setNotionToken] = useState("");
   const [parentPageId, setParentPageId] = useState("");
   const [prompt, setPrompt] = useState(samplePrompt);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [isStartingOAuth, setIsStartingOAuth] = useState(false);
   const [preview, setPreview] = useState<GeneratedPreview | null>(null);
+  const [oauthNotice, setOauthNotice] = useState("");
 
   useEffect(() => {
     void window.samovar.getAppInfo().then(setAppInfo);
   }, []);
 
-  const settingsReady = useMemo(
+  const tokenSettingsReady = useMemo(
     () => openAiKey.trim().length > 0 && notionToken.trim().length > 0 && parentPageId.trim().length > 0,
     [openAiKey, notionToken, parentPageId]
   );
+
+  const canCreateTable = openAiKey.trim().length > 0 && notionConnected && parentPageId.trim().length > 0;
+
+  async function handleOAuthStart() {
+    setIsStartingOAuth(true);
+
+    try {
+      const result = await window.samovar.startNotionOAuth();
+
+      setOauthNotice(
+        result.ok
+          ? "Notion sign-in opened in the browser."
+          : "Notion OAuth client ID is not configured yet."
+      );
+    } catch {
+      setOauthNotice("Notion sign-in could not be opened.");
+    } finally {
+      setIsStartingOAuth(false);
+    }
+  }
+
+  function handleTokenConnect(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    if (!tokenSettingsReady) {
+      return;
+    }
+
+    setOauthNotice("");
+    setAuthMode("token");
+    setNotionConnected(true);
+    setScreen("workspace");
+  }
 
   function handleGenerate(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -81,21 +133,135 @@ export function App() {
             <span>Version</span>
             <strong>{appInfo?.version ?? "0.1.0"}</strong>
           </div>
+          <div className="status-row">
+            <CheckCircle2 size={18} />
+            <span>Notion</span>
+            <strong>{notionConnected ? authMode : "Not connected"}</strong>
+          </div>
         </div>
       </aside>
 
       <section className="workspace" aria-label="SamovarNotes workspace">
         <div className="toolbar">
           <div>
-            <h2>Research to Notion</h2>
-            <p>Local MVP workspace</p>
+            <h2>{screen === "connect" ? "Connect Notion" : "Research to Notion"}</h2>
+            <p>{screen === "connect" ? "Workspace sign-in" : "Local MVP workspace"}</p>
           </div>
-          <button className="icon-button" type="button" aria-label="Settings">
+          <button
+            className="icon-button"
+            type="button"
+            aria-label="Settings"
+            onClick={() => setScreen("connect")}
+            disabled={screen === "connect"}
+          >
             <Settings size={18} />
           </button>
         </div>
 
-        <div className="grid">
+        {screen === "connect" ? (
+          <div className="connect-grid">
+            <section className="connect-hero" aria-labelledby="connect-title">
+              <div className="auth-badge">
+                <LockKeyhole size={18} />
+                Notion OAuth
+              </div>
+              <h2 id="connect-title">Sign in to Notion</h2>
+              <p>Connect a workspace before creating research pages and databases.</p>
+
+              <div className="segmented-control" role="tablist" aria-label="Notion connection mode">
+                <button
+                  type="button"
+                  className={authMode === "oauth" ? "segment is-active" : "segment"}
+                  onClick={() => setAuthMode("oauth")}
+                >
+                  OAuth
+                </button>
+                <button
+                  type="button"
+                  className={authMode === "token" ? "segment is-active" : "segment"}
+                  onClick={() => setAuthMode("token")}
+                >
+                  Token
+                </button>
+              </div>
+
+              {authMode === "oauth" ? (
+                <div className="oauth-panel">
+                  <button className="notion-button" type="button" onClick={() => void handleOAuthStart()}>
+                    <Link2 size={18} />
+                    {isStartingOAuth ? "Opening Notion..." : "Continue with Notion"}
+                    <ArrowRight size={18} />
+                  </button>
+                  {oauthNotice ? <p className="inline-notice">{oauthNotice}</p> : null}
+                </div>
+              ) : (
+                <form className="token-form" onSubmit={handleTokenConnect}>
+                  <label>
+                    OpenAI API key
+                    <input
+                      type="password"
+                      value={openAiKey}
+                      onChange={(event) => setOpenAiKey(event.target.value)}
+                      placeholder="sk-..."
+                      autoComplete="off"
+                    />
+                  </label>
+
+                  <label>
+                    Notion token
+                    <input
+                      type="password"
+                      value={notionToken}
+                      onChange={(event) => setNotionToken(event.target.value)}
+                      placeholder="secret_..."
+                      autoComplete="off"
+                    />
+                  </label>
+
+                  <label>
+                    Parent page ID
+                    <input
+                      value={parentPageId}
+                      onChange={(event) => setParentPageId(event.target.value)}
+                      placeholder="Notion parent page ID"
+                      autoComplete="off"
+                    />
+                  </label>
+
+                  <button className="primary-button" type="submit" disabled={!tokenSettingsReady}>
+                    <ArrowRight size={18} />
+                    Continue
+                  </button>
+                </form>
+              )}
+            </section>
+
+            <section className="panel oauth-flow-panel" aria-labelledby="oauth-flow-title">
+              <div className="panel-title">
+                <KeyRound size={18} />
+                <h3 id="oauth-flow-title">OAuth Flow</h3>
+              </div>
+              <div className="flow-steps">
+                <div className="flow-step is-ready">
+                  <span>1</span>
+                  <strong>Authorize</strong>
+                  <p>Open Notion consent.</p>
+                </div>
+                <div className="flow-step">
+                  <span>2</span>
+                  <strong>Callback</strong>
+                  <p>Receive OAuth code.</p>
+                </div>
+                <div className="flow-step">
+                  <span>3</span>
+                  <strong>Exchange</strong>
+                  <p>Backend stores workspace token.</p>
+                </div>
+              </div>
+            </section>
+          </div>
+        ) : (
+          <div className="grid">
           <section className="panel settings-panel" aria-labelledby="settings-title">
             <div className="panel-title">
               <KeyRound size={18} />
@@ -152,7 +318,7 @@ export function App() {
 
             <textarea value={prompt} onChange={(event) => setPrompt(event.target.value)} rows={11} />
 
-            <button className="primary-button" type="submit" disabled={!settingsReady || isGenerating}>
+            <button className="primary-button" type="submit" disabled={!canCreateTable || isGenerating}>
               <Play size={18} fill="currentColor" />
               {isGenerating ? "Creating..." : "Create Notion Research Table"}
             </button>
@@ -194,7 +360,8 @@ export function App() {
               </div>
             )}
           </section>
-        </div>
+          </div>
+        )}
       </section>
     </main>
   );

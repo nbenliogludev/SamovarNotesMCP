@@ -10,6 +10,7 @@ This repository now contains the first runnable scaffold:
 
 - npm workspace monorepo
 - Electron + React + Vite desktop app shell
+- Notion connection screen with OAuth-first UI and MVP token fallback
 - shared `packages/core` contracts and schemas
 - local `packages/mcp-server` scaffold with registered MCP tool names
 
@@ -156,6 +157,8 @@ OPENAI_API_KEY=
 OPENAI_MODEL=gpt-4.1-mini
 NOTION_TOKEN=
 NOTION_PARENT_PAGE_ID=
+NOTION_OAUTH_CLIENT_ID=
+NOTION_OAUTH_REDIRECT_URI=samovar-notes-mcp://notion/callback
 ```
 
 The MCP server will read configuration from environment variables. The desktop app will store user settings locally and safely.
@@ -165,6 +168,8 @@ The MCP server will read configuration from environment variables. The desktop a
 The Electron app should include:
 
 - `SettingsScreen`
+  - Notion connection mode selector
+  - OAuth sign-in entry point
   - OpenAI API key input
   - Notion token input
   - Parent Notion page ID input

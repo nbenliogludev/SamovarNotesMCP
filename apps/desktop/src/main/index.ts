@@ -1,8 +1,32 @@
 import { app, BrowserWindow, ipcMain, shell } from "electron";
+import { config as loadEnv } from "dotenv";
+import { randomUUID } from "node:crypto";
 import { join } from "node:path";
+
+loadEnv({ path: join(process.cwd(), ".env") });
 
 const APP_NAME = "SamovarNotes MCP";
 const APP_SUBTITLE = "AI Research-to-Notion Assistant";
+const NOTION_OAUTH_AUTHORIZE_URL = "https://api.notion.com/v1/oauth/authorize";
+
+function createNotionOAuthUrl(): string | null {
+  const clientId = process.env.NOTION_OAUTH_CLIENT_ID;
+
+  if (!clientId) {
+    return null;
+  }
+
+  const redirectUri = process.env.NOTION_OAUTH_REDIRECT_URI ?? "samovar-notes-mcp://notion/callback";
+  const authorizationUrl = new URL(NOTION_OAUTH_AUTHORIZE_URL);
+
+  authorizationUrl.searchParams.set("client_id", clientId);
+  authorizationUrl.searchParams.set("response_type", "code");
+  authorizationUrl.searchParams.set("owner", "user");
+  authorizationUrl.searchParams.set("redirect_uri", redirectUri);
+  authorizationUrl.searchParams.set("state", randomUUID());
+
+  return authorizationUrl.toString();
+}
 
 function registerIpcHandlers(): void {
   ipcMain.handle("app:get-info", () => ({
@@ -23,6 +47,23 @@ function registerIpcHandlers(): void {
     await shell.openExternal(parsedUrl.toString());
 
     return { ok: true };
+  });
+
+  ipcMain.handle("notion:start-oauth", async () => {
+    const authorizationUrl = createNotionOAuthUrl();
+
+    if (!authorizationUrl) {
+      return {
+        ok: false,
+        reason: "missing-client-id"
+      };
+    }
+
+    await shell.openExternal(authorizationUrl);
+
+    return {
+      ok: true
+    };
   });
 }
 
