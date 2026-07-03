@@ -12,7 +12,7 @@ This repository now contains the first runnable scaffold:
 - Electron + React + Vite desktop app shell
 - Notion connection screen with OAuth-required UI
 - Multi-Notion workspace list with active workspace selection
-- Electron deep-link callback handling for `samovar-notes-mcp://notion/callback`
+- Electron local callback handling for `http://127.0.0.1:47837/notion/callback`
 - shared `packages/core` contracts and schemas
 - local `packages/mcp-server` scaffold with registered MCP tool names
 
@@ -163,7 +163,7 @@ OPENAI_API_KEY=
 OPENAI_MODEL=gpt-4.1-mini
 NOTION_PARENT_PAGE_ID=
 NOTION_OAUTH_CLIENT_ID=
-NOTION_OAUTH_REDIRECT_URI=samovar-notes-mcp://notion/callback
+NOTION_OAUTH_REDIRECT_URI=http://127.0.0.1:47837/notion/callback
 NOTION_OAUTH_TOKEN_EXCHANGE_URL=
 ```
 
@@ -342,7 +342,7 @@ The service should request strict JSON only. If the installed OpenAI SDK support
 
 ## Notion OAuth Path
 
-The MVP treats Notion OAuth as the required workspace connection. The Electron app opens Notion OAuth, receives `samovar-notes-mcp://notion/callback`, verifies OAuth state, and stores connected workspace metadata.
+The MVP treats Notion OAuth as the required workspace connection. The Electron app opens Notion OAuth, receives `http://127.0.0.1:47837/notion/callback`, verifies OAuth state, and stores connected workspace metadata.
 
 The token exchange must happen behind `NOTION_OAUTH_TOKEN_EXCHANGE_URL`. That backend endpoint should accept:
 
@@ -350,7 +350,7 @@ The token exchange must happen behind `NOTION_OAUTH_TOKEN_EXCHANGE_URL`. That ba
 {
   "code": "temporary-notion-code",
   "state": "oauth-state",
-  "redirectUri": "samovar-notes-mcp://notion/callback"
+  "redirectUri": "http://127.0.0.1:47837/notion/callback"
 }
 ```
 

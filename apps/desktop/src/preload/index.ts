@@ -41,7 +41,7 @@ const samovarApi = {
         }
       | {
           ok: false;
-          reason: "missing-client-id";
+          reason: "missing-client-id" | "callback-server-failed";
         }
     >,
   listNotionWorkspaces: () =>

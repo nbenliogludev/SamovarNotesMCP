@@ -106,7 +106,9 @@ export function App() {
       setOauthNotice(
         result.ok
           ? "Notion sign-in opened in the browser."
-          : "Notion OAuth client ID is not configured yet."
+          : result.reason === "callback-server-failed"
+            ? "Local OAuth callback server could not start."
+            : "Notion OAuth client ID is not configured yet."
       );
     } catch {
       setOauthNotice("Notion sign-in could not be opened.");

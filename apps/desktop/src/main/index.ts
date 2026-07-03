@@ -3,6 +3,7 @@ import { config as loadEnv } from "dotenv";
 import { randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import { dirname, join, resolve } from "node:path";
 
 function loadDesktopEnv(): void {
@@ -25,6 +26,9 @@ loadDesktopEnv();
 const APP_NAME = "SamovarNotes MCP";
 const APP_SUBTITLE = "AI Research-to-Notion Assistant";
 const APP_PROTOCOL = "samovar-notes-mcp";
+const NOTION_OAUTH_CALLBACK_HOST = "127.0.0.1";
+const NOTION_OAUTH_CALLBACK_PORT = Number(process.env.NOTION_OAUTH_CALLBACK_PORT ?? "47837");
+const NOTION_OAUTH_CALLBACK_PATH = "/notion/callback";
 const NOTION_OAUTH_AUTHORIZE_URL = "https://api.notion.com/v1/oauth/authorize";
 const NOTION_OAUTH_TOKEN_EXCHANGE_URL = process.env.NOTION_OAUTH_TOKEN_EXCHANGE_URL;
 
@@ -77,6 +81,7 @@ type NotionTokenExchangeResponse = {
 };
 
 let mainWindow: BrowserWindow | null = null;
+let oauthCallbackServer: Server | null = null;
 let latestOAuthEvent: NotionOAuthEvent = {
   status: "idle",
   message: "Notion OAuth has not started."
@@ -159,6 +164,10 @@ function setLatestOAuthEvent(event: NotionOAuthEvent): void {
   mainWindow?.webContents.send("notion:oauth-event", event);
 }
 
+function getDefaultNotionOAuthRedirectUri(): string {
+  return `http://${NOTION_OAUTH_CALLBACK_HOST}:${NOTION_OAUTH_CALLBACK_PORT}${NOTION_OAUTH_CALLBACK_PATH}`;
+}
+
 function createNotionOAuthUrl(): { state: string; url: string } | null {
   const clientId = process.env.NOTION_OAUTH_CLIENT_ID;
 
@@ -166,7 +175,7 @@ function createNotionOAuthUrl(): { state: string; url: string } | null {
     return null;
   }
 
-  const redirectUri = process.env.NOTION_OAUTH_REDIRECT_URI ?? "samovar-notes-mcp://notion/callback";
+  const redirectUri = process.env.NOTION_OAUTH_REDIRECT_URI ?? getDefaultNotionOAuthRedirectUri();
   const authorizationUrl = new URL(NOTION_OAUTH_AUTHORIZE_URL);
   const state = randomUUID();
 
@@ -192,6 +201,18 @@ function consumeOAuthState(state: string | null): boolean {
   pendingOAuthStates.delete(state);
 
   return true;
+}
+
+function isNotionOAuthCallbackUrl(parsedUrl: URL): boolean {
+  const isCustomProtocolCallback =
+    parsedUrl.protocol === `${APP_PROTOCOL}:` && parsedUrl.hostname === "notion";
+  const isLoopbackCallback =
+    parsedUrl.protocol === "http:" &&
+    ["127.0.0.1", "localhost"].includes(parsedUrl.hostname) &&
+    parsedUrl.port === String(NOTION_OAUTH_CALLBACK_PORT) &&
+    parsedUrl.pathname === NOTION_OAUTH_CALLBACK_PATH;
+
+  return isCustomProtocolCallback || isLoopbackCallback;
 }
 
 async function exchangeNotionOAuthCode(input: {
@@ -258,7 +279,7 @@ async function exchangeNotionOAuthCode(input: {
 async function handleNotionOAuthCallback(callbackUrl: string): Promise<void> {
   const parsedUrl = new URL(callbackUrl);
 
-  if (parsedUrl.protocol !== `${APP_PROTOCOL}:` || parsedUrl.hostname !== "notion") {
+  if (!isNotionOAuthCallbackUrl(parsedUrl)) {
     return;
   }
 
@@ -295,7 +316,7 @@ async function handleNotionOAuthCallback(callbackUrl: string): Promise<void> {
     return;
   }
 
-  const redirectUri = process.env.NOTION_OAUTH_REDIRECT_URI ?? "samovar-notes-mcp://notion/callback";
+  const redirectUri = process.env.NOTION_OAUTH_REDIRECT_URI ?? getDefaultNotionOAuthRedirectUri();
 
   try {
     const workspace = await exchangeNotionOAuthCode({
@@ -322,6 +343,51 @@ async function handleNotionOAuthCallback(callbackUrl: string): Promise<void> {
       error: errorMessage
     });
   }
+}
+
+async function handleOAuthHttpRequest(request: IncomingMessage, response: ServerResponse): Promise<void> {
+  const callbackUrl = new URL(request.url ?? "/", getDefaultNotionOAuthRedirectUri());
+
+  if (!isNotionOAuthCallbackUrl(callbackUrl)) {
+    response.writeHead(404, { "Content-Type": "text/plain; charset=utf-8" });
+    response.end("Not found");
+    return;
+  }
+
+  await handleNotionOAuthCallback(callbackUrl.toString());
+
+  response.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+  response.end(`<!doctype html>
+<html lang="en">
+  <head><meta charset="utf-8" /><title>SamovarNotes MCP</title></head>
+  <body style="font-family: -apple-system, BlinkMacSystemFont, sans-serif; padding: 48px;">
+    <h1>Notion callback received</h1>
+    <p>You can return to SamovarNotes MCP.</p>
+  </body>
+</html>`);
+}
+
+async function ensureOAuthCallbackServer(): Promise<void> {
+  if (oauthCallbackServer) {
+    return;
+  }
+
+  await new Promise<void>((resolvePromise, rejectPromise) => {
+    const server = createServer((request, response) => {
+      void handleOAuthHttpRequest(request, response).catch((error: unknown) => {
+        const message = error instanceof Error ? error.message : "Unknown callback error";
+
+        response.writeHead(500, { "Content-Type": "text/plain; charset=utf-8" });
+        response.end(message);
+      });
+    });
+
+    server.once("error", rejectPromise);
+    server.listen(NOTION_OAUTH_CALLBACK_PORT, NOTION_OAUTH_CALLBACK_HOST, () => {
+      oauthCallbackServer = server;
+      resolvePromise();
+    });
+  });
 }
 
 function findProtocolUrl(argv: string[]): string | undefined {
@@ -369,6 +435,15 @@ function registerIpcHandlers(): void {
       return {
         ok: false,
         reason: "missing-client-id"
+      };
+    }
+
+    try {
+      await ensureOAuthCallbackServer();
+    } catch {
+      return {
+        ok: false,
+        reason: "callback-server-failed"
       };
     }
 
@@ -511,6 +586,8 @@ app.whenReady().then(() => {
 });
 
 app.on("window-all-closed", () => {
+  oauthCallbackServer?.close();
+
   if (process.platform !== "darwin") {
     app.quit();
   }
