@@ -1,10 +1,26 @@
 import { app, BrowserWindow, ipcMain, safeStorage, shell } from "electron";
 import { config as loadEnv } from "dotenv";
 import { randomUUID } from "node:crypto";
+import { existsSync } from "node:fs";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
-import { dirname, join } from "node:path";
+import { dirname, join, resolve } from "node:path";
 
-loadEnv({ path: join(process.cwd(), ".env") });
+function loadDesktopEnv(): void {
+  const candidatePaths = [
+    join(process.cwd(), ".env"),
+    join(process.cwd(), "../..", ".env"),
+    join(__dirname, "../../../..", ".env")
+  ];
+  const envPath = [...new Set(candidatePaths.map((candidatePath) => resolve(candidatePath)))].find((candidatePath) =>
+    existsSync(candidatePath)
+  );
+
+  if (envPath) {
+    loadEnv({ path: envPath });
+  }
+}
+
+loadDesktopEnv();
 
 const APP_NAME = "SamovarNotes MCP";
 const APP_SUBTITLE = "AI Research-to-Notion Assistant";
