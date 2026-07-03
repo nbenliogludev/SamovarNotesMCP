@@ -17,15 +17,15 @@ export interface NotionAuthService {
   getWorkspaceToken(workspaceId: string): Promise<NotionWorkspaceToken | null>;
 }
 
-export class MvpTokenNotionAuthService {
+export class StaticWorkspaceTokenNotionAuthService {
   constructor(private readonly token: string) {}
 
   async generateAuthorizationUrl(): Promise<string> {
-    throw new Error("Notion OAuth is not implemented in the MVP token mode.");
+    throw new Error("Notion OAuth authorization URL generation is not implemented by this adapter.");
   }
 
   async handleCallback(): Promise<NotionWorkspaceToken> {
-    throw new Error("Notion OAuth callbacks are not implemented in the MVP token mode.");
+    throw new Error("Notion OAuth callbacks are not implemented by this adapter.");
   }
 
   async exchangeCodeForAccessToken(): Promise<NotionWorkspaceToken> {

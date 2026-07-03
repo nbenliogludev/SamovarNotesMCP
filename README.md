@@ -10,7 +10,7 @@ This repository now contains the first runnable scaffold:
 
 - npm workspace monorepo
 - Electron + React + Vite desktop app shell
-- Notion connection screen with OAuth-first UI and MVP token fallback
+- Notion connection screen with OAuth-required UI
 - shared `packages/core` contracts and schemas
 - local `packages/mcp-server` scaffold with registered MCP tool names
 
@@ -31,14 +31,14 @@ Notion and OpenAI calls are intentionally mocked or placeholder-only in this bra
 - Local MCP server exposing reusable Notion tools
 - Shared core package for desktop and MCP flows
 - Safe local settings with no hardcoded secrets
-- MVP support for Notion Internal Integration Tokens
-- OAuth-ready architecture for future Notion workspace auth
+- Required Notion OAuth workspace connection
+- OAuth-ready architecture for backend token exchange
 
 ## MVP User Flow
 
 1. Open the Electron desktop app.
-2. Enter an OpenAI API key.
-3. Enter a Notion Internal Integration Token.
+2. Connect a Notion workspace through OAuth.
+3. Enter an OpenAI API key.
 4. Enter a target Notion parent page ID.
 5. Write a research prompt.
 6. Generate structured research data with OpenAI.
@@ -137,16 +137,16 @@ npm run build
 
 ## Notion Setup
 
-For the MVP, use a Notion Internal Integration Token.
+Notion OAuth is the required workspace connection path.
 
-1. Create a Notion integration in the Notion developer dashboard.
-2. Copy the internal integration token.
-3. Open the Notion parent page where generated pages/databases should be created.
-4. Share that parent page with the integration.
+1. Create a public Notion integration in the Notion developer dashboard.
+2. Configure the OAuth redirect URI from `.env.example`.
+3. Add the OAuth client ID to `.env`.
+4. Open the Notion parent page where generated pages/databases should be created.
 5. Copy the parent page ID from the Notion page URL.
-6. Add the token and parent page ID to `.env` or to the desktop app settings screen.
+6. Add the parent page ID in the desktop app settings screen after OAuth sign-in.
 
-Production OAuth should use a backend token exchange service. Do not store a Notion OAuth client secret in Electron.
+OAuth token exchange should use a backend service. Do not store a Notion OAuth client secret in Electron.
 
 ## Environment
 
@@ -155,7 +155,6 @@ Create `.env` from `.env.example`:
 ```env
 OPENAI_API_KEY=
 OPENAI_MODEL=gpt-4.1-mini
-NOTION_TOKEN=
 NOTION_PARENT_PAGE_ID=
 NOTION_OAUTH_CLIENT_ID=
 NOTION_OAUTH_REDIRECT_URI=samovar-notes-mcp://notion/callback
@@ -168,10 +167,8 @@ The MCP server will read configuration from environment variables. The desktop a
 The Electron app should include:
 
 - `SettingsScreen`
-  - Notion connection mode selector
-  - OAuth sign-in entry point
+  - Required Notion OAuth sign-in entry point
   - OpenAI API key input
-  - Notion token input
   - Parent Notion page ID input
   - Save settings action
   - Test Notion connection action
@@ -336,7 +333,7 @@ The service should request strict JSON only. If the installed OpenAI SDK support
 
 ## Notion OAuth Path
 
-The MVP starts with a user-provided Notion Internal Integration Token. OAuth support should be added behind a `NotionAuthService` interface with placeholders for:
+The MVP treats Notion OAuth as the required workspace connection. OAuth support lives behind a `NotionAuthService` interface with placeholders for:
 
 - Generate authorization URL
 - Handle callback
@@ -360,7 +357,7 @@ npm run notion:demo -- --input examples/demo-research-table.json
 The app and MCP server should return user-friendly errors for:
 
 - Missing OpenAI API key
-- Missing Notion token
+- Missing Notion OAuth connection
 - Missing Notion parent page ID
 - Invalid Notion parent page ID
 - Notion permission errors
@@ -380,7 +377,7 @@ The app and MCP server should return user-friendly errors for:
 
 ## Future Improvements
 
-- Full Notion OAuth
+- Complete backend OAuth callback and token exchange
 - Encrypted OS keychain storage
 - Better web research with citations
 - Template gallery

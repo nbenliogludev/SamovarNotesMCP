@@ -210,33 +210,7 @@ h1 {
   font-weight: 800;
 }
 
-.segmented-control {
-  display: grid;
-  width: min(100%, 300px);
-  grid-template-columns: 1fr 1fr;
-  gap: 4px;
-  padding: 4px;
-  background: rgba(255, 255, 255, 0.11);
-  border: 1px solid rgba(255, 255, 255, 0.16);
-  border-radius: 8px;
-}
-
-.segment {
-  min-height: 38px;
-  color: rgba(248, 244, 236, 0.82);
-  background: transparent;
-  border: 0;
-  border-radius: 6px;
-  font-weight: 800;
-}
-
-.segment.is-active {
-  color: #23312e;
-  background: #fffdf8;
-}
-
-.oauth-panel,
-.token-form {
+.oauth-panel {
   display: grid;
   width: min(100%, 520px);
   gap: 14px;
@@ -264,14 +238,6 @@ h1 {
   color: #f0c05a;
   font-size: 13px;
   font-weight: 750;
-}
-
-.token-form label {
-  color: rgba(248, 244, 236, 0.82);
-}
-
-.token-form input {
-  color: #24211c;
 }
 
 .oauth-flow-panel {

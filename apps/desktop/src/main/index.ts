@@ -79,9 +79,17 @@ function createMainWindow(): void {
     webPreferences: {
       contextIsolation: true,
       nodeIntegration: false,
-      preload: join(__dirname, "../preload/index.mjs"),
+      preload: join(__dirname, "../preload/index.cjs"),
       sandbox: true
     }
+  });
+
+  mainWindow.webContents.on("did-fail-load", (_event, errorCode, errorDescription, validatedUrl) => {
+    console.error(`[renderer] Failed to load ${validatedUrl}: ${errorCode} ${errorDescription}`);
+  });
+
+  mainWindow.webContents.on("render-process-gone", (_event, details) => {
+    console.error(`[renderer] Process gone: ${details.reason}`);
   });
 
   mainWindow.once("ready-to-show", () => {

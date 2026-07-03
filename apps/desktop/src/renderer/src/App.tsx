@@ -10,7 +10,7 @@ import {
   Settings,
   Sparkles
 } from "lucide-react";
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 
 type AppInfo = {
   name: string;
@@ -27,7 +27,6 @@ type GeneratedPreview = {
   rowCount: number;
 };
 
-type AuthMode = "oauth" | "token";
 type Screen = "connect" | "workspace";
 
 const samplePrompt =
@@ -36,10 +35,8 @@ const samplePrompt =
 export function App() {
   const [appInfo, setAppInfo] = useState<AppInfo | null>(null);
   const [screen, setScreen] = useState<Screen>("connect");
-  const [authMode, setAuthMode] = useState<AuthMode>("oauth");
   const [notionConnected, setNotionConnected] = useState(false);
   const [openAiKey, setOpenAiKey] = useState("");
-  const [notionToken, setNotionToken] = useState("");
   const [parentPageId, setParentPageId] = useState("");
   const [prompt, setPrompt] = useState(samplePrompt);
   const [isGenerating, setIsGenerating] = useState(false);
@@ -48,13 +45,19 @@ export function App() {
   const [oauthNotice, setOauthNotice] = useState("");
 
   useEffect(() => {
+    if (!window.samovar) {
+      setAppInfo({
+        name: "SamovarNotes MCP",
+        subtitle: "AI Research-to-Notion Assistant",
+        version: "0.1.0",
+        platform: "browser" as NodeJS.Platform,
+        packaged: false
+      });
+      return;
+    }
+
     void window.samovar.getAppInfo().then(setAppInfo);
   }, []);
-
-  const tokenSettingsReady = useMemo(
-    () => openAiKey.trim().length > 0 && notionToken.trim().length > 0 && parentPageId.trim().length > 0,
-    [openAiKey, notionToken, parentPageId]
-  );
 
   const canCreateTable = openAiKey.trim().length > 0 && notionConnected && parentPageId.trim().length > 0;
 
@@ -62,6 +65,11 @@ export function App() {
     setIsStartingOAuth(true);
 
     try {
+      if (!window.samovar) {
+        setOauthNotice("Notion OAuth is available in the desktop app.");
+        return;
+      }
+
       const result = await window.samovar.startNotionOAuth();
 
       setOauthNotice(
@@ -74,19 +82,6 @@ export function App() {
     } finally {
       setIsStartingOAuth(false);
     }
-  }
-
-  function handleTokenConnect(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-
-    if (!tokenSettingsReady) {
-      return;
-    }
-
-    setOauthNotice("");
-    setAuthMode("token");
-    setNotionConnected(true);
-    setScreen("workspace");
   }
 
   function handleGenerate(event: FormEvent<HTMLFormElement>) {
@@ -136,7 +131,7 @@ export function App() {
           <div className="status-row">
             <CheckCircle2 size={18} />
             <span>Notion</span>
-            <strong>{notionConnected ? authMode : "Not connected"}</strong>
+            <strong>{notionConnected ? "OAuth" : "Not connected"}</strong>
           </div>
         </div>
       </aside>
@@ -168,72 +163,14 @@ export function App() {
               <h2 id="connect-title">Sign in to Notion</h2>
               <p>Connect a workspace before creating research pages and databases.</p>
 
-              <div className="segmented-control" role="tablist" aria-label="Notion connection mode">
-                <button
-                  type="button"
-                  className={authMode === "oauth" ? "segment is-active" : "segment"}
-                  onClick={() => setAuthMode("oauth")}
-                >
-                  OAuth
+              <div className="oauth-panel">
+                <button className="notion-button" type="button" onClick={() => void handleOAuthStart()}>
+                  <Link2 size={18} />
+                  {isStartingOAuth ? "Opening Notion..." : "Continue with Notion"}
+                  <ArrowRight size={18} />
                 </button>
-                <button
-                  type="button"
-                  className={authMode === "token" ? "segment is-active" : "segment"}
-                  onClick={() => setAuthMode("token")}
-                >
-                  Token
-                </button>
+                {oauthNotice ? <p className="inline-notice">{oauthNotice}</p> : null}
               </div>
-
-              {authMode === "oauth" ? (
-                <div className="oauth-panel">
-                  <button className="notion-button" type="button" onClick={() => void handleOAuthStart()}>
-                    <Link2 size={18} />
-                    {isStartingOAuth ? "Opening Notion..." : "Continue with Notion"}
-                    <ArrowRight size={18} />
-                  </button>
-                  {oauthNotice ? <p className="inline-notice">{oauthNotice}</p> : null}
-                </div>
-              ) : (
-                <form className="token-form" onSubmit={handleTokenConnect}>
-                  <label>
-                    OpenAI API key
-                    <input
-                      type="password"
-                      value={openAiKey}
-                      onChange={(event) => setOpenAiKey(event.target.value)}
-                      placeholder="sk-..."
-                      autoComplete="off"
-                    />
-                  </label>
-
-                  <label>
-                    Notion token
-                    <input
-                      type="password"
-                      value={notionToken}
-                      onChange={(event) => setNotionToken(event.target.value)}
-                      placeholder="secret_..."
-                      autoComplete="off"
-                    />
-                  </label>
-
-                  <label>
-                    Parent page ID
-                    <input
-                      value={parentPageId}
-                      onChange={(event) => setParentPageId(event.target.value)}
-                      placeholder="Notion parent page ID"
-                      autoComplete="off"
-                    />
-                  </label>
-
-                  <button className="primary-button" type="submit" disabled={!tokenSettingsReady}>
-                    <ArrowRight size={18} />
-                    Continue
-                  </button>
-                </form>
-              )}
             </section>
 
             <section className="panel oauth-flow-panel" aria-labelledby="oauth-flow-title">
@@ -262,104 +199,100 @@ export function App() {
           </div>
         ) : (
           <div className="grid">
-          <section className="panel settings-panel" aria-labelledby="settings-title">
-            <div className="panel-title">
-              <KeyRound size={18} />
-              <h3 id="settings-title">Settings</h3>
-            </div>
+            <section className="panel settings-panel" aria-labelledby="settings-title">
+              <div className="panel-title">
+                <KeyRound size={18} />
+                <h3 id="settings-title">Settings</h3>
+              </div>
 
-            <label>
-              OpenAI API key
-              <input
-                type="password"
-                value={openAiKey}
-                onChange={(event) => setOpenAiKey(event.target.value)}
-                placeholder="sk-..."
-                autoComplete="off"
-              />
-            </label>
+              <label>
+                OpenAI API key
+                <input
+                  type="password"
+                  value={openAiKey}
+                  onChange={(event) => setOpenAiKey(event.target.value)}
+                  placeholder="sk-..."
+                  autoComplete="off"
+                />
+              </label>
 
-            <label>
-              Notion token
-              <input
-                type="password"
-                value={notionToken}
-                onChange={(event) => setNotionToken(event.target.value)}
-                placeholder="secret_..."
-                autoComplete="off"
-              />
-            </label>
+              <label>
+                Parent page ID
+                <input
+                  value={parentPageId}
+                  onChange={(event) => setParentPageId(event.target.value)}
+                  placeholder="Notion parent page ID"
+                  autoComplete="off"
+                />
+              </label>
 
-            <label>
-              Parent page ID
-              <input
-                value={parentPageId}
-                onChange={(event) => setParentPageId(event.target.value)}
-                placeholder="Notion parent page ID"
-                autoComplete="off"
-              />
-            </label>
-
-            <div className="button-row">
-              <button type="button" className="secondary-button">
-                Test OpenAI
-              </button>
-              <button type="button" className="secondary-button">
-                Test Notion
-              </button>
-            </div>
-          </section>
-
-          <form className="panel prompt-panel" aria-labelledby="prompt-title" onSubmit={handleGenerate}>
-            <div className="panel-title">
-              <Database size={18} />
-              <h3 id="prompt-title">Prompt</h3>
-            </div>
-
-            <textarea value={prompt} onChange={(event) => setPrompt(event.target.value)} rows={11} />
-
-            <button className="primary-button" type="submit" disabled={!canCreateTable || isGenerating}>
-              <Play size={18} fill="currentColor" />
-              {isGenerating ? "Creating..." : "Create Notion Research Table"}
-            </button>
-          </form>
-
-          <section className="panel result-panel" aria-labelledby="result-title">
-            <div className="panel-title">
-              <ExternalLink size={18} />
-              <h3 id="result-title">Result</h3>
-            </div>
-
-            {preview ? (
-              <div className="result-content">
-                <h4>{preview.title}</h4>
-                <p>{preview.summary}</p>
-                <dl>
-                  <div>
-                    <dt>Rows</dt>
-                    <dd>{preview.rowCount}</dd>
-                  </div>
-                  <div>
-                    <dt>URL</dt>
-                    <dd>{preview.notionUrl}</dd>
-                  </div>
-                </dl>
-                <button
-                  className="secondary-button"
-                  type="button"
-                  onClick={() => void window.samovar.openExternal(preview.notionUrl)}
-                >
-                  <ExternalLink size={16} />
-                  Open Notion
+              <div className="button-row">
+                <button type="button" className="secondary-button">
+                  Test OpenAI
+                </button>
+                <button type="button" className="secondary-button">
+                  Test Notion
                 </button>
               </div>
-            ) : (
-              <div className="empty-state">
-                <Database size={28} />
-                <p>Generated Notion database preview will appear here.</p>
+            </section>
+
+            <form className="panel prompt-panel" aria-labelledby="prompt-title" onSubmit={handleGenerate}>
+              <div className="panel-title">
+                <Database size={18} />
+                <h3 id="prompt-title">Prompt</h3>
               </div>
-            )}
-          </section>
+
+              <textarea value={prompt} onChange={(event) => setPrompt(event.target.value)} rows={11} />
+
+              <button className="primary-button" type="submit" disabled={!canCreateTable || isGenerating}>
+                <Play size={18} fill="currentColor" />
+                {isGenerating ? "Creating..." : "Create Notion Research Table"}
+              </button>
+            </form>
+
+            <section className="panel result-panel" aria-labelledby="result-title">
+              <div className="panel-title">
+                <ExternalLink size={18} />
+                <h3 id="result-title">Result</h3>
+              </div>
+
+              {preview ? (
+                <div className="result-content">
+                  <h4>{preview.title}</h4>
+                  <p>{preview.summary}</p>
+                  <dl>
+                    <div>
+                      <dt>Rows</dt>
+                      <dd>{preview.rowCount}</dd>
+                    </div>
+                    <div>
+                      <dt>URL</dt>
+                      <dd>{preview.notionUrl}</dd>
+                    </div>
+                  </dl>
+                  <button
+                    className="secondary-button"
+                    type="button"
+                    onClick={() => {
+                      if (window.samovar) {
+                        void window.samovar.openExternal(preview.notionUrl);
+                        return;
+                      }
+
+                      window.open(preview.notionUrl, "_blank", "noopener");
+                    }}
+                  >
+                    <ExternalLink size={16} />
+                    Open Notion
+                  </button>
+                </div>
+              ) : (
+                <div className="empty-state">
+                  <Database size={28} />
+                  <p>Generated Notion database preview will appear here.</p>
+                </div>
+              )}
+            </section>
           </div>
         )}
       </section>
