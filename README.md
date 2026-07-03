@@ -6,7 +6,14 @@ SamovarNotes MCP turns raw research prompts into structured Notion pages, tables
 
 ## Status
 
-This repository is currently in the bootstrap stage. This README defines the MVP scope, architecture, commands, security expectations, and tool contracts. Implementation will follow in focused branches.
+This repository now contains the first runnable scaffold:
+
+- npm workspace monorepo
+- Electron + React + Vite desktop app shell
+- shared `packages/core` contracts and schemas
+- local `packages/mcp-server` scaffold with registered MCP tool names
+
+Notion and OpenAI calls are intentionally mocked or placeholder-only in this branch. They will be implemented in the next focused branches.
 
 ## Product
 
@@ -90,13 +97,28 @@ samovar-notes-mcp/
 
 ## Setup
 
-These are the intended MVP commands once the project scaffold is implemented.
+Install dependencies:
 
 ```bash
 npm install
 cp .env.example .env
+```
+
+Run the desktop app in development mode:
+
+```bash
 npm run desktop:dev
 ```
+
+In development this opens a real Electron desktop window. You do not get an `.exe` or `.dmg` at this stage; the app is launched by npm while the local Vite dev server is running.
+
+Build the desktop app bundle:
+
+```bash
+npm run desktop:build
+```
+
+Packaging into installers such as `.exe`, `.dmg`, or `.AppImage` will be added later with an Electron packaging tool.
 
 To run the local MCP server separately:
 

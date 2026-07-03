@@ -1,0 +1,24 @@
+{
+  "name": "samovar-notes-mcp",
+  "version": "0.1.0",
+  "private": true,
+  "description": "SamovarNotes MCP turns raw research into structured Notion pages, tables, and databases.",
+  "type": "module",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "desktop:dev": "npm --workspace @samovar-notes-mcp/desktop run dev",
+    "desktop:build": "npm --workspace @samovar-notes-mcp/desktop run build",
+    "mcp:dev": "npm --workspace @samovar-notes-mcp/mcp-server run dev",
+    "mcp:build": "npm --workspace @samovar-notes-mcp/mcp-server run build",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "lint": "npm run lint --workspaces --if-present",
+    "build": "npm run build --workspaces --if-present"
+  },
+  "engines": {
+    "node": ">=20.19.0",
+    "npm": ">=10.0.0"
+  }
+}
