@@ -160,6 +160,169 @@ h1 {
   min-height: 0;
 }
 
+.connect-grid {
+  display: grid;
+  grid-template-columns: minmax(420px, 1.1fr) minmax(300px, 0.8fr);
+  gap: 18px;
+  min-height: 0;
+}
+
+.connect-hero {
+  display: flex;
+  min-width: 0;
+  min-height: 520px;
+  flex-direction: column;
+  justify-content: center;
+  gap: 22px;
+  padding: 36px;
+  color: #f8f4ec;
+  background:
+    linear-gradient(135deg, rgba(47, 111, 103, 0.92), rgba(37, 49, 68, 0.95)),
+    #26313f;
+  border-radius: 8px;
+  box-shadow: 0 18px 40px rgba(55, 47, 36, 0.13);
+}
+
+.connect-hero h2 {
+  max-width: 560px;
+  font-size: 42px;
+  line-height: 1.04;
+  letter-spacing: 0;
+}
+
+.connect-hero > p {
+  max-width: 520px;
+  color: rgba(248, 244, 236, 0.74);
+  font-size: 16px;
+  line-height: 1.45;
+}
+
+.auth-badge {
+  display: inline-flex;
+  width: fit-content;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  color: #17342f;
+  background: #f0c05a;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.segmented-control {
+  display: grid;
+  width: min(100%, 300px);
+  grid-template-columns: 1fr 1fr;
+  gap: 4px;
+  padding: 4px;
+  background: rgba(255, 255, 255, 0.11);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 8px;
+}
+
+.segment {
+  min-height: 38px;
+  color: rgba(248, 244, 236, 0.82);
+  background: transparent;
+  border: 0;
+  border-radius: 6px;
+  font-weight: 800;
+}
+
+.segment.is-active {
+  color: #23312e;
+  background: #fffdf8;
+}
+
+.oauth-panel,
+.token-form {
+  display: grid;
+  width: min(100%, 520px);
+  gap: 14px;
+}
+
+.notion-button {
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr) 22px;
+  gap: 10px;
+  align-items: center;
+  min-height: 52px;
+  padding: 0 16px;
+  color: #151719;
+  background: #fffdf8;
+  border: 1px solid rgba(255, 255, 255, 0.55);
+  border-radius: 8px;
+  font-weight: 850;
+}
+
+.notion-button:hover {
+  background: #f7fbf7;
+}
+
+.inline-notice {
+  color: #f0c05a;
+  font-size: 13px;
+  font-weight: 750;
+}
+
+.token-form label {
+  color: rgba(248, 244, 236, 0.82);
+}
+
+.token-form input {
+  color: #24211c;
+}
+
+.oauth-flow-panel {
+  min-height: 520px;
+}
+
+.flow-steps {
+  display: grid;
+  gap: 12px;
+}
+
+.flow-step {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr);
+  gap: 4px 12px;
+  align-items: center;
+  padding: 14px;
+  background: #fffdf8;
+  border: 1px solid #ded6ca;
+  border-radius: 8px;
+}
+
+.flow-step span {
+  display: grid;
+  grid-row: 1 / span 2;
+  width: 34px;
+  height: 34px;
+  place-items: center;
+  color: #fffdf8;
+  background: #52615d;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.flow-step.is-ready span {
+  color: #17342f;
+  background: #f0c05a;
+}
+
+.flow-step strong {
+  color: #24211c;
+  font-size: 14px;
+}
+
+.flow-step p {
+  color: #675f55;
+  font-size: 13px;
+  line-height: 1.35;
+}
+
 .panel {
   display: flex;
   min-width: 0;
