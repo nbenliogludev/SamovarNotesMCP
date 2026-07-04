@@ -25,6 +25,12 @@ export type NotionOAuthEvent = {
   error?: string;
 };
 
+export type NotionChatCommandResult = {
+  ok: boolean;
+  message: string;
+  url?: string;
+};
+
 const samovarApi = {
   getAppInfo: () =>
     ipcRenderer.invoke("app:get-info") as Promise<{
@@ -55,6 +61,8 @@ const samovarApi = {
     ipcRenderer.invoke("notion:set-active-workspace", workspaceId) as Promise<{ ok: boolean }>,
   removeNotionWorkspace: (workspaceId: string) =>
     ipcRenderer.invoke("notion:remove-workspace", workspaceId) as Promise<{ ok: boolean }>,
+  executeNotionChatCommand: (input: { message: string; workspaceId?: string }) =>
+    ipcRenderer.invoke("notion:execute-chat-command", input) as Promise<NotionChatCommandResult>,
   onNotionOAuthEvent: (callback: (event: NotionOAuthEvent) => void) => {
     const listener = (_event: Electron.IpcRendererEvent, oauthEvent: NotionOAuthEvent) => {
       callback(oauthEvent);

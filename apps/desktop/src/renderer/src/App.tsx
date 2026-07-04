@@ -33,7 +33,7 @@ type ChatMessage = {
 type Screen = "connect" | "chat";
 
 const samplePrompt =
-  "Research the 10 best places to visit in Italy in summer and create a ranked Notion table.";
+  "Create empty page with table where you need to create 5 rows and 10 columns.";
 
 function createMessage(role: ChatMessage["role"], content: string): ChatMessage {
   return {
@@ -151,7 +151,7 @@ export function App() {
     }
   }
 
-  function handleChatSubmit(event: FormEvent<HTMLFormElement>) {
+  async function handleChatSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
     const content = chatInput.trim();
@@ -164,16 +164,32 @@ export function App() {
     setChatMessages((currentMessages) => [...currentMessages, createMessage("user", content)]);
     setIsResponding(true);
 
-    window.setTimeout(() => {
+    try {
+      if (!window.samovar) {
+        setChatMessages((currentMessages) => [
+          ...currentMessages,
+          createMessage("assistant", "Notion execution is available in the desktop app.")
+        ]);
+        return;
+      }
+
+      const result = await window.samovar.executeNotionChatCommand({
+        message: content,
+        ...(activeWorkspaceId ? { workspaceId: activeWorkspaceId } : {})
+      });
+
       setChatMessages((currentMessages) => [
         ...currentMessages,
-        createMessage(
-          "assistant",
-          "Got it. I can turn this into a structured Notion research workflow once OpenAI and Notion tool execution are connected."
-        )
+        createMessage("assistant", result.message)
       ]);
+    } catch {
+      setChatMessages((currentMessages) => [
+        ...currentMessages,
+        createMessage("assistant", "I could not run the Notion command. Try reconnecting Notion and sending it again.")
+      ]);
+    } finally {
       setIsResponding(false);
-    }, 650);
+    }
   }
 
   function handleComposerKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
