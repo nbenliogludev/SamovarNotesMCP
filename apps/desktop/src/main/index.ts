@@ -45,7 +45,8 @@ type StoredNotionWorkspace = {
   workspaceName?: string;
   workspaceIcon?: string;
   botId?: string;
-  accessTokenCiphertext: string;
+  authStatus?: "connected" | "token-exchange-pending";
+  accessTokenCiphertext?: string;
   refreshTokenCiphertext?: string;
   connectedAt: string;
   updatedAt: string;
@@ -159,6 +160,18 @@ async function upsertWorkspace(workspace: StoredNotionWorkspace): Promise<Public
   return toPublicWorkspace(workspace);
 }
 
+function createPendingTokenExchangeWorkspace(state: string): StoredNotionWorkspace {
+  const now = new Date().toISOString();
+
+  return {
+    workspaceId: `pending-${state}`,
+    workspaceName: "Authorized Notion workspace",
+    authStatus: "token-exchange-pending",
+    connectedAt: now,
+    updatedAt: now
+  };
+}
+
 function setLatestOAuthEvent(event: NotionOAuthEvent): void {
   latestOAuthEvent = event;
   mainWindow?.webContents.send("notion:oauth-event", event);
@@ -248,6 +261,7 @@ async function exchangeNotionOAuthCode(input: {
   const now = new Date().toISOString();
   const workspace: StoredNotionWorkspace = {
     workspaceId,
+    authStatus: "connected",
     accessTokenCiphertext: protectSecret(accessToken),
     connectedAt: now,
     updatedAt: now
@@ -334,12 +348,20 @@ async function handleNotionOAuthCallback(callbackUrl: string): Promise<void> {
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : "unknown-error";
 
+    if (errorMessage === "missing-token-exchange-url") {
+      const publicWorkspace = await upsertWorkspace(createPendingTokenExchangeWorkspace(state));
+
+      setLatestOAuthEvent({
+        status: "connected",
+        message: "Notion authorization received. Token exchange can be connected next.",
+        workspace: publicWorkspace
+      });
+      return;
+    }
+
     setLatestOAuthEvent({
-      status: errorMessage === "missing-token-exchange-url" ? "needs-token-exchange" : "error",
-      message:
-        errorMessage === "missing-token-exchange-url"
-          ? "Notion returned an OAuth code. Configure a backend token exchange URL to finish connecting."
-          : "Notion OAuth token exchange failed.",
+      status: "error",
+      message: "Notion OAuth token exchange failed.",
       error: errorMessage
     });
   }

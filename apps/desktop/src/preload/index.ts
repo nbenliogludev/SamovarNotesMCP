@@ -13,6 +13,7 @@ export type NotionWorkspace = {
   workspaceName?: string;
   workspaceIcon?: string;
   botId?: string;
+  authStatus?: "connected" | "token-exchange-pending";
   connectedAt: string;
   updatedAt: string;
 };

@@ -1,18 +1,18 @@
 import {
   ArrowRight,
+  Bot,
   CheckCircle2,
   Database,
-  ExternalLink,
   KeyRound,
   Link2,
   LockKeyhole,
-  Plus,
-  Play,
+  Send,
   Settings,
   Sparkles,
-  Trash2
+  Trash2,
+  UserRound
 } from "lucide-react";
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, KeyboardEvent, useEffect, useState } from "react";
 import type { NotionOAuthEvent, NotionWorkspace } from "../../preload";
 
 type AppInfo = {
@@ -23,29 +23,36 @@ type AppInfo = {
   packaged: boolean;
 };
 
-type GeneratedPreview = {
-  title: string;
-  summary: string;
-  notionUrl: string;
-  rowCount: number;
+type ChatMessage = {
+  id: string;
+  role: "user" | "assistant";
+  content: string;
+  createdAt: string;
 };
 
-type Screen = "connect" | "workspace";
+type Screen = "connect" | "chat";
 
 const samplePrompt =
-  "Research the 10 best places to visit in Italy in summer and create a ranked Notion table with place, region, best season, budget, short description, and why it is worth visiting.";
+  "Research the 10 best places to visit in Italy in summer and create a ranked Notion table.";
+
+function createMessage(role: ChatMessage["role"], content: string): ChatMessage {
+  return {
+    id: crypto.randomUUID(),
+    role,
+    content,
+    createdAt: new Date().toISOString()
+  };
+}
 
 export function App() {
   const [appInfo, setAppInfo] = useState<AppInfo | null>(null);
   const [screen, setScreen] = useState<Screen>("connect");
   const [notionWorkspaces, setNotionWorkspaces] = useState<NotionWorkspace[]>([]);
   const [activeWorkspaceId, setActiveWorkspaceId] = useState<string | undefined>();
-  const [openAiKey, setOpenAiKey] = useState("");
-  const [parentPageId, setParentPageId] = useState("");
-  const [prompt, setPrompt] = useState(samplePrompt);
-  const [isGenerating, setIsGenerating] = useState(false);
+  const [chatInput, setChatInput] = useState("");
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
+  const [isResponding, setIsResponding] = useState(false);
   const [isStartingOAuth, setIsStartingOAuth] = useState(false);
-  const [preview, setPreview] = useState<GeneratedPreview | null>(null);
   const [oauthNotice, setOauthNotice] = useState("");
   const [oauthStatus, setOauthStatus] = useState<NotionOAuthEvent["status"]>("idle");
 
@@ -72,7 +79,7 @@ export function App() {
       setOauthNotice(notionState.latestOAuthEvent.status === "idle" ? "" : notionState.latestOAuthEvent.message);
 
       if (notionState.workspaces.length > 0) {
-        setScreen("workspace");
+        setScreen("chat");
       }
     };
 
@@ -90,7 +97,7 @@ export function App() {
 
   const activeWorkspace = notionWorkspaces.find((workspace) => workspace.workspaceId === activeWorkspaceId);
   const notionConnected = notionWorkspaces.length > 0;
-  const canCreateTable = openAiKey.trim().length > 0 && Boolean(activeWorkspace) && parentPageId.trim().length > 0;
+  const hasMessages = chatMessages.length > 0;
 
   async function handleOAuthStart() {
     setIsStartingOAuth(true);
@@ -140,22 +147,66 @@ export function App() {
 
     if (notionState.workspaces.length === 0) {
       setScreen("connect");
+      setChatMessages([]);
     }
   }
 
-  function handleGenerate(event: FormEvent<HTMLFormElement>) {
+  function handleChatSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    setIsGenerating(true);
+
+    const content = chatInput.trim();
+
+    if (!content || !notionConnected || isResponding) {
+      return;
+    }
+
+    setChatInput("");
+    setChatMessages((currentMessages) => [...currentMessages, createMessage("user", content)]);
+    setIsResponding(true);
 
     window.setTimeout(() => {
-      setPreview({
-        title: "Italy Summer Travel Research",
-        summary: "Scaffold preview generated locally. OpenAI and Notion handlers will replace this mock result next.",
-        notionUrl: "https://www.notion.so/",
-        rowCount: 10
-      });
-      setIsGenerating(false);
-    }, 550);
+      setChatMessages((currentMessages) => [
+        ...currentMessages,
+        createMessage(
+          "assistant",
+          "Got it. I can turn this into a structured Notion research workflow once OpenAI and Notion tool execution are connected."
+        )
+      ]);
+      setIsResponding(false);
+    }, 650);
+  }
+
+  function handleComposerKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
+    if (event.key === "Enter" && !event.shiftKey) {
+      event.preventDefault();
+      event.currentTarget.form?.requestSubmit();
+    }
+  }
+
+  function renderComposer(placement: "center" | "bottom") {
+    return (
+      <form
+        className={placement === "center" ? "chat-composer is-centered" : "chat-composer is-bottom"}
+        onSubmit={handleChatSubmit}
+      >
+        <textarea
+          aria-label="Message"
+          value={chatInput}
+          onChange={(event) => setChatInput(event.target.value)}
+          onKeyDown={handleComposerKeyDown}
+          placeholder="Ask SamovarNotes to create a Notion page, table, or research database..."
+          rows={placement === "center" ? 3 : 1}
+        />
+        <button
+          className="send-button"
+          type="submit"
+          aria-label="Send"
+          disabled={!chatInput.trim() || !notionConnected || isResponding}
+        >
+          <Send size={18} />
+        </button>
+      </form>
+    );
   }
 
   return (
@@ -202,15 +253,14 @@ export function App() {
       <section className="workspace" aria-label="SamovarNotes workspace">
         <div className="toolbar">
           <div>
-            <h2>{screen === "connect" ? "Connect Notion" : "Research to Notion"}</h2>
-            <p>{screen === "connect" ? "Workspace sign-in" : "Local MVP workspace"}</p>
+            <h2>{screen === "connect" ? "Connect Notion" : "Samovar Chat"}</h2>
+            <p>{screen === "connect" ? "Workspace sign-in" : activeWorkspace?.workspaceName ?? "Notion workspace"}</p>
           </div>
           <button
             className="icon-button"
             type="button"
             aria-label="Settings"
-            onClick={() => setScreen("connect")}
-            disabled={screen === "connect"}
+            onClick={() => setScreen(screen === "connect" && notionConnected ? "chat" : "connect")}
           >
             <Settings size={18} />
           </button>
@@ -238,9 +288,9 @@ export function App() {
                 </button>
                 {oauthNotice ? <p className={`inline-notice is-${oauthStatus}`}>{oauthNotice}</p> : null}
                 {notionConnected ? (
-                  <button className="primary-button" type="button" onClick={() => setScreen("workspace")}>
+                  <button className="primary-button" type="button" onClick={() => setScreen("chat")}>
                     <ArrowRight size={18} />
-                    Continue to workspace
+                    Continue to chat
                   </button>
                 ) : null}
               </div>
@@ -272,7 +322,7 @@ export function App() {
                         </span>
                         <span>
                           <strong>{workspace.workspaceName ?? "Notion workspace"}</strong>
-                          <small>{workspace.workspaceId}</small>
+                          <small>{workspace.authStatus === "token-exchange-pending" ? "Token exchange pending" : workspace.workspaceId}</small>
                         </span>
                       </button>
                       <button
@@ -299,7 +349,7 @@ export function App() {
                   <strong>Authorize</strong>
                   <p>Open Notion consent.</p>
                 </div>
-                <div className="flow-step">
+                <div className="flow-step is-ready">
                   <span>2</span>
                   <strong>Callback</strong>
                   <p>Receive OAuth code.</p>
@@ -313,122 +363,45 @@ export function App() {
             </section>
           </div>
         ) : (
-          <div className="grid">
-            <section className="panel settings-panel" aria-labelledby="settings-title">
-              <div className="panel-title">
-                <KeyRound size={18} />
-                <h3 id="settings-title">Settings</h3>
-              </div>
-
-              <label>
-                Active Notion workspace
-                <select
-                  value={activeWorkspaceId ?? ""}
-                  onChange={(event) => void handleActiveWorkspaceChange(event.target.value)}
-                  disabled={notionWorkspaces.length === 0}
-                >
-                  {notionWorkspaces.length === 0 ? <option value="">Connect Notion first</option> : null}
-                  {notionWorkspaces.map((workspace) => (
-                    <option value={workspace.workspaceId} key={workspace.workspaceId}>
-                      {workspace.workspaceName ?? workspace.workspaceId}
-                    </option>
-                  ))}
-                </select>
-              </label>
-
-              <button className="secondary-button" type="button" onClick={() => void handleOAuthStart()}>
-                <Plus size={16} />
-                Add Notion workspace
-              </button>
-
-              <label>
-                OpenAI API key
-                <input
-                  type="password"
-                  value={openAiKey}
-                  onChange={(event) => setOpenAiKey(event.target.value)}
-                  placeholder="sk-..."
-                  autoComplete="off"
-                />
-              </label>
-
-              <label>
-                Parent page ID
-                <input
-                  value={parentPageId}
-                  onChange={(event) => setParentPageId(event.target.value)}
-                  placeholder="Notion parent page ID"
-                  autoComplete="off"
-                />
-              </label>
-
-              <div className="button-row">
-                <button type="button" className="secondary-button">
-                  Test OpenAI
-                </button>
-                <button type="button" className="secondary-button">
-                  Test Notion
-                </button>
-              </div>
-            </section>
-
-            <form className="panel prompt-panel" aria-labelledby="prompt-title" onSubmit={handleGenerate}>
-              <div className="panel-title">
-                <Database size={18} />
-                <h3 id="prompt-title">Prompt</h3>
-              </div>
-
-              <textarea value={prompt} onChange={(event) => setPrompt(event.target.value)} rows={11} />
-
-              <button className="primary-button" type="submit" disabled={!canCreateTable || isGenerating}>
-                <Play size={18} fill="currentColor" />
-                {isGenerating ? "Creating..." : "Create Notion Research Table"}
-              </button>
-            </form>
-
-            <section className="panel result-panel" aria-labelledby="result-title">
-              <div className="panel-title">
-                <ExternalLink size={18} />
-                <h3 id="result-title">Result</h3>
-              </div>
-
-              {preview ? (
-                <div className="result-content">
-                  <h4>{preview.title}</h4>
-                  <p>{preview.summary}</p>
-                  <dl>
-                    <div>
-                      <dt>Rows</dt>
-                      <dd>{preview.rowCount}</dd>
+          <div className={hasMessages ? "chat-layout has-messages" : "chat-layout is-empty"}>
+            {hasMessages ? (
+              <div className="chat-thread" aria-label="Chat messages">
+                {chatMessages.map((message) => (
+                  <article className={`chat-message is-${message.role}`} key={message.id}>
+                    <div className="message-avatar">
+                      {message.role === "user" ? <UserRound size={18} /> : <Bot size={18} />}
                     </div>
-                    <div>
-                      <dt>URL</dt>
-                      <dd>{preview.notionUrl}</dd>
+                    <div className="message-bubble">
+                      <p>{message.content}</p>
                     </div>
-                  </dl>
-                  <button
-                    className="secondary-button"
-                    type="button"
-                    onClick={() => {
-                      if (window.samovar) {
-                        void window.samovar.openExternal(preview.notionUrl);
-                        return;
-                      }
+                  </article>
+                ))}
+                {isResponding ? (
+                  <article className="chat-message is-assistant">
+                    <div className="message-avatar">
+                      <Bot size={18} />
+                    </div>
+                    <div className="message-bubble">
+                      <p>Preparing...</p>
+                    </div>
+                  </article>
+                ) : null}
+              </div>
+            ) : (
+              <section className="chat-empty" aria-labelledby="chat-empty-title">
+                <div className="chat-workspace-pill">
+                  <CheckCircle2 size={17} />
+                  {activeWorkspace?.workspaceName ?? "Notion connected"}
+                </div>
+                <h2 id="chat-empty-title">What are we creating in Notion?</h2>
+                {renderComposer("center")}
+                <button className="secondary-button compact-action" type="button" onClick={() => setChatInput(samplePrompt)}>
+                  Try sample prompt
+                </button>
+              </section>
+            )}
 
-                      window.open(preview.notionUrl, "_blank", "noopener");
-                    }}
-                  >
-                    <ExternalLink size={16} />
-                    Open Notion
-                  </button>
-                </div>
-              ) : (
-                <div className="empty-state">
-                  <Database size={28} />
-                  <p>Generated Notion database preview will appear here.</p>
-                </div>
-              )}
-            </section>
+            {hasMessages ? renderComposer("bottom") : null}
           </div>
         )}
       </section>
