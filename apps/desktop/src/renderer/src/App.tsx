@@ -1,7 +1,9 @@
 import {
   ArrowRight,
   Bot,
+  Check,
   CheckCircle2,
+  Copy,
   Database,
   KeyRound,
   Link2,
@@ -44,6 +46,16 @@ function createMessage(role: ChatMessage["role"], content: string): ChatMessage 
   };
 }
 
+function formatMessageDate(value: string): string {
+  return new Intl.DateTimeFormat(undefined, {
+    day: "2-digit",
+    month: "2-digit",
+    year: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit"
+  }).format(new Date(value));
+}
+
 export function App() {
   const [appInfo, setAppInfo] = useState<AppInfo | null>(null);
   const [screen, setScreen] = useState<Screen>("connect");
@@ -53,6 +65,7 @@ export function App() {
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [isResponding, setIsResponding] = useState(false);
   const [isStartingOAuth, setIsStartingOAuth] = useState(false);
+  const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null);
   const [oauthNotice, setOauthNotice] = useState("");
   const [oauthStatus, setOauthStatus] = useState<NotionOAuthEvent["status"]>("idle");
 
@@ -197,6 +210,14 @@ export function App() {
       event.preventDefault();
       event.currentTarget.form?.requestSubmit();
     }
+  }
+
+  async function handleCopyMessage(message: ChatMessage) {
+    await navigator.clipboard.writeText(message.content);
+    setCopiedMessageId(message.id);
+    window.setTimeout(() => {
+      setCopiedMessageId((currentMessageId) => (currentMessageId === message.id ? null : currentMessageId));
+    }, 1200);
   }
 
   function renderComposer(placement: "center" | "bottom") {
@@ -389,6 +410,18 @@ export function App() {
                     </div>
                     <div className="message-bubble">
                       <p>{message.content}</p>
+                      <div className="message-meta">
+                        <span>{formatMessageDate(message.createdAt)}</span>
+                        <button
+                          className="message-copy-button"
+                          type="button"
+                          aria-label="Copy message"
+                          title="Copy message"
+                          onClick={() => void handleCopyMessage(message)}
+                        >
+                          {copiedMessageId === message.id ? <Check size={14} /> : <Copy size={14} />}
+                        </button>
+                      </div>
                     </div>
                   </article>
                 ))}

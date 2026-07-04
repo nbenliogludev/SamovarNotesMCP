@@ -23,6 +23,12 @@ function loadDesktopEnv(): void {
 
 loadDesktopEnv();
 
+function getOptionalEnv(name: string): string | undefined {
+  const value = process.env[name]?.trim();
+
+  return value ? value : undefined;
+}
+
 const APP_NAME = "SamovarNotes MCP";
 const APP_SUBTITLE = "AI Research-to-Notion Assistant";
 const APP_PROTOCOL = "samovar-notes-mcp";
@@ -31,7 +37,7 @@ const NOTION_OAUTH_CALLBACK_PORT = Number(process.env.NOTION_OAUTH_CALLBACK_PORT
 const NOTION_OAUTH_CALLBACK_PATH = "/notion/callback";
 const NOTION_OAUTH_AUTHORIZE_URL = "https://api.notion.com/v1/oauth/authorize";
 const NOTION_OAUTH_TOKEN_URL = "https://api.notion.com/v1/oauth/token";
-const NOTION_OAUTH_TOKEN_EXCHANGE_URL = process.env.NOTION_OAUTH_TOKEN_EXCHANGE_URL;
+const NOTION_OAUTH_TOKEN_EXCHANGE_URL = getOptionalEnv("NOTION_OAUTH_TOKEN_EXCHANGE_URL");
 const NOTION_API_BASE_URL = "https://api.notion.com/v1";
 const NOTION_API_VERSION = process.env.NOTION_API_VERSION ?? "2026-03-11";
 const NOTION_LEGACY_DATABASE_VERSION = "2022-06-28";
@@ -234,18 +240,51 @@ function setLatestOAuthEvent(event: NotionOAuthEvent): void {
   mainWindow?.webContents.send("notion:oauth-event", event);
 }
 
+function formatTokenExchangeError(errorMessage: string): string {
+  if (!errorMessage.startsWith("token-exchange-failed:")) {
+    return `Notion OAuth token exchange failed: ${errorMessage}`;
+  }
+
+  const [status, ...bodyParts] = errorMessage.slice("token-exchange-failed:".length).split(":");
+  const body = bodyParts.join(":");
+
+  if (!status) {
+    return "Notion OAuth token exchange failed.";
+  }
+
+  try {
+    const parsed = JSON.parse(body) as {
+      code?: string;
+      error?: string;
+      error_description?: string;
+      message?: string;
+      request_id?: string;
+    };
+    const details = parsed.error_description ?? parsed.message ?? parsed.error ?? parsed.code;
+    const requestId = parsed.request_id ? ` Request id: ${parsed.request_id}` : "";
+
+    return details
+      ? `Notion OAuth token exchange failed (${status}): ${details}${requestId}`
+      : `Notion OAuth token exchange failed (${status}).`;
+  } catch {
+    return body
+      ? `Notion OAuth token exchange failed (${status}): ${body.slice(0, 180)}`
+      : `Notion OAuth token exchange failed (${status}).`;
+  }
+}
+
 function getDefaultNotionOAuthRedirectUri(): string {
   return `http://${NOTION_OAUTH_CALLBACK_HOST}:${NOTION_OAUTH_CALLBACK_PORT}${NOTION_OAUTH_CALLBACK_PATH}`;
 }
 
 function createNotionOAuthUrl(): { state: string; url: string } | null {
-  const clientId = process.env.NOTION_OAUTH_CLIENT_ID;
+  const clientId = getOptionalEnv("NOTION_OAUTH_CLIENT_ID");
 
   if (!clientId) {
     return null;
   }
 
-  const redirectUri = process.env.NOTION_OAUTH_REDIRECT_URI ?? getDefaultNotionOAuthRedirectUri();
+  const redirectUri = getOptionalEnv("NOTION_OAUTH_REDIRECT_URI") ?? getDefaultNotionOAuthRedirectUri();
   const authorizationUrl = new URL(NOTION_OAUTH_AUTHORIZE_URL);
   const state = randomUUID();
 
@@ -290,8 +329,8 @@ async function exchangeNotionOAuthCode(input: {
   redirectUri: string;
   state: string;
 }): Promise<StoredNotionWorkspace> {
-  const clientId = process.env.NOTION_OAUTH_CLIENT_ID;
-  const clientSecret = process.env.NOTION_OAUTH_CLIENT_SECRET;
+  const clientId = getOptionalEnv("NOTION_OAUTH_CLIENT_ID");
+  const clientSecret = getOptionalEnv("NOTION_OAUTH_CLIENT_SECRET");
 
   if (!NOTION_OAUTH_TOKEN_EXCHANGE_URL && (!clientId || !clientSecret)) {
     throw new Error("missing-token-exchange-url");
@@ -301,24 +340,27 @@ async function exchangeNotionOAuthCode(input: {
   const tokenExchangePayload: Record<string, string> = NOTION_OAUTH_TOKEN_EXCHANGE_URL
     ? input
     : {
-        client_id: clientId ?? "",
-        client_secret: clientSecret ?? "",
         grant_type: "authorization_code",
         code: input.code,
         redirect_uri: input.redirectUri
       };
+  const tokenExchangeHeaders: Record<string, string> = {
+    Accept: "application/json",
+    "Content-Type": "application/json"
+  };
+
+  if (!NOTION_OAUTH_TOKEN_EXCHANGE_URL) {
+    tokenExchangeHeaders.Authorization = `Basic ${Buffer.from(`${clientId}:${clientSecret}`).toString("base64")}`;
+  }
 
   const response = await fetch(tokenExchangeUrl, {
     method: "POST",
-    headers: {
-      Accept: "application/json",
-      "Content-Type": "application/json"
-    },
+    headers: tokenExchangeHeaders,
     body: JSON.stringify(tokenExchangePayload)
   });
 
   if (!response.ok) {
-    throw new Error(`token-exchange-failed:${response.status}`);
+    throw new Error(`token-exchange-failed:${response.status}:${await response.text()}`);
   }
 
   const tokenBody = (await response.json()) as NotionTokenExchangeResponse;
@@ -401,7 +443,7 @@ async function handleNotionOAuthCallback(callbackUrl: string): Promise<void> {
     return;
   }
 
-  const redirectUri = process.env.NOTION_OAUTH_REDIRECT_URI ?? getDefaultNotionOAuthRedirectUri();
+  const redirectUri = getOptionalEnv("NOTION_OAUTH_REDIRECT_URI") ?? getDefaultNotionOAuthRedirectUri();
 
   try {
     const workspace = await exchangeNotionOAuthCode({
@@ -419,6 +461,8 @@ async function handleNotionOAuthCallback(callbackUrl: string): Promise<void> {
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : "unknown-error";
 
+    console.error("Notion OAuth token exchange failed", error);
+
     if (errorMessage === "missing-token-exchange-url") {
       const publicWorkspace = await upsertWorkspace(createPendingTokenExchangeWorkspace(state));
 
@@ -432,7 +476,7 @@ async function handleNotionOAuthCallback(callbackUrl: string): Promise<void> {
 
     setLatestOAuthEvent({
       status: "error",
-      message: "Notion OAuth token exchange failed.",
+      message: formatTokenExchangeError(errorMessage),
       error: errorMessage
     });
   }
@@ -508,7 +552,9 @@ function mapNotionError(error: unknown): string {
   }
 
   if (message === "token-exchange-required") {
-    return "Notion is authorized, but this workspace has no access token yet. Add NOTION_OAUTH_CLIENT_SECRET to .env, restart the app, and reconnect Notion.";
+    return getOptionalEnv("NOTION_OAUTH_CLIENT_SECRET") || NOTION_OAUTH_TOKEN_EXCHANGE_URL
+      ? "This Notion workspace was connected before token exchange was available. Open settings and click Add Notion workspace to reconnect it."
+      : "Notion is authorized, but this workspace has no access token yet. Add NOTION_OAUTH_CLIENT_SECRET to .env, restart the app, and reconnect Notion.";
   }
 
   if (message.includes("notion-api-failed:403")) {
@@ -678,7 +724,7 @@ async function readActiveWorkspace(workspaceId?: string): Promise<StoredNotionWo
 }
 
 async function getWorkspaceAccessToken(workspaceId?: string): Promise<string> {
-  const envToken = process.env.NOTION_ACCESS_TOKEN ?? process.env.NOTION_API_KEY;
+  const envToken = getOptionalEnv("NOTION_ACCESS_TOKEN") ?? getOptionalEnv("NOTION_API_KEY");
   const workspace = await readActiveWorkspace(workspaceId);
 
   if (workspace.accessTokenCiphertext) {
