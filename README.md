@@ -13,10 +13,12 @@ This repository now contains the first runnable scaffold:
 - Notion connection screen with OAuth-required UI
 - Multi-Notion workspace list with active workspace selection
 - Electron local callback handling for `http://127.0.0.1:47837/notion/callback`
+- Chat-style workspace after Notion sign-in
+- Basic Notion command execution for pages, tables, and databases
 - shared `packages/core` contracts and schemas
 - local `packages/mcp-server` scaffold with registered MCP tool names
 
-Notion token exchange and OpenAI calls are intentionally backend/mock placeholder-only in this branch. They will be implemented in the next focused branches.
+OpenAI research generation is still intentionally placeholder-only. The desktop MVP can execute basic deterministic Notion commands such as creating an empty page, a table page, or a database with placeholder rows.
 
 ## Product
 
@@ -43,17 +45,14 @@ Notion token exchange and OpenAI calls are intentionally backend/mock placeholde
 2. Connect a Notion workspace through OAuth.
 3. Add more Notion workspaces if needed.
 4. Select the active Notion workspace.
-5. Enter an OpenAI API key.
-6. Enter a target Notion parent page ID.
-7. Write a research prompt.
-8. Generate structured research data with OpenAI.
-9. Create a Notion database or page through shared tool handlers.
-10. Show the created Notion URL in the app.
+5. Write a Notion creation command in the chat box.
+6. The Electron main process executes the command through Notion API.
+7. Show the created Notion URL in the chat.
 
 Example prompt:
 
 ```txt
-Research the 10 best places to visit in Italy in summer and create a ranked Notion table with place, region, best season, budget, short description, and why it is worth visiting.
+Create empty page with table where you need to create 5 rows and 10 columns.
 ```
 
 ## Target Architecture
@@ -147,12 +146,11 @@ Notion OAuth is the required workspace connection path.
 1. Create a public Notion integration in the Notion developer dashboard.
 2. Configure the OAuth redirect URI from `.env.example`.
 3. Add the OAuth client ID to `.env`.
-4. Configure `NOTION_OAUTH_TOKEN_EXCHANGE_URL` to point to a backend endpoint that exchanges a Notion OAuth `code` for workspace tokens.
-5. Open the Notion parent page where generated pages/databases should be created.
-6. Copy the parent page ID from the Notion page URL.
-7. Add the parent page ID in the desktop app settings screen after OAuth sign-in.
+4. For local MVP development, add `NOTION_OAUTH_CLIENT_SECRET` to `.env` so the app can exchange OAuth codes for workspace tokens.
+5. For production, prefer `NOTION_OAUTH_TOKEN_EXCHANGE_URL` and move the client secret to a backend endpoint.
+6. Give the Notion integration Insert Content capability.
 
-OAuth token exchange should use a backend service. Do not store a Notion OAuth client secret in Electron.
+Do not commit `.env` or hardcode Notion secrets. The desktop app stores OAuth access tokens locally using Electron `safeStorage` when available.
 
 ## Environment
 
@@ -163,6 +161,7 @@ OPENAI_API_KEY=
 OPENAI_MODEL=gpt-4.1-mini
 NOTION_PARENT_PAGE_ID=
 NOTION_OAUTH_CLIENT_ID=
+NOTION_OAUTH_CLIENT_SECRET=
 NOTION_OAUTH_REDIRECT_URI=http://127.0.0.1:47837/notion/callback
 NOTION_OAUTH_TOKEN_EXCHANGE_URL=
 ```
