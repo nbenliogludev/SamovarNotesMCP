@@ -1,31 +1,410 @@
-import { app, BrowserWindow, ipcMain, shell } from "electron";
+import { app, BrowserWindow, ipcMain, safeStorage, shell } from "electron";
 import { config as loadEnv } from "dotenv";
 import { randomUUID } from "node:crypto";
-import { join } from "node:path";
+import { existsSync } from "node:fs";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
+import { dirname, join, resolve } from "node:path";
 
-loadEnv({ path: join(process.cwd(), ".env") });
+function loadDesktopEnv(): void {
+  const candidatePaths = [
+    join(process.cwd(), ".env"),
+    join(process.cwd(), "../..", ".env"),
+    join(__dirname, "../../../..", ".env")
+  ];
+  const envPath = [...new Set(candidatePaths.map((candidatePath) => resolve(candidatePath)))].find((candidatePath) =>
+    existsSync(candidatePath)
+  );
+
+  if (envPath) {
+    loadEnv({ path: envPath });
+  }
+}
+
+loadDesktopEnv();
 
 const APP_NAME = "SamovarNotes MCP";
 const APP_SUBTITLE = "AI Research-to-Notion Assistant";
+const APP_PROTOCOL = "samovar-notes-mcp";
+const NOTION_OAUTH_CALLBACK_HOST = "127.0.0.1";
+const NOTION_OAUTH_CALLBACK_PORT = Number(process.env.NOTION_OAUTH_CALLBACK_PORT ?? "47837");
+const NOTION_OAUTH_CALLBACK_PATH = "/notion/callback";
 const NOTION_OAUTH_AUTHORIZE_URL = "https://api.notion.com/v1/oauth/authorize";
+const NOTION_OAUTH_TOKEN_EXCHANGE_URL = process.env.NOTION_OAUTH_TOKEN_EXCHANGE_URL;
 
-function createNotionOAuthUrl(): string | null {
+type NotionOAuthStatus =
+  | "idle"
+  | "opened"
+  | "connected"
+  | "needs-token-exchange"
+  | "cancelled"
+  | "error";
+
+type StoredNotionWorkspace = {
+  workspaceId: string;
+  workspaceName?: string;
+  workspaceIcon?: string;
+  botId?: string;
+  accessTokenCiphertext: string;
+  refreshTokenCiphertext?: string;
+  connectedAt: string;
+  updatedAt: string;
+};
+
+type PublicNotionWorkspace = Omit<StoredNotionWorkspace, "accessTokenCiphertext" | "refreshTokenCiphertext">;
+
+type NotionWorkspaceStore = {
+  activeWorkspaceId?: string;
+  workspaces: StoredNotionWorkspace[];
+};
+
+type NotionOAuthEvent = {
+  status: NotionOAuthStatus;
+  message: string;
+  workspace?: PublicNotionWorkspace;
+  error?: string;
+};
+
+type NotionTokenExchangeResponse = {
+  access_token?: string;
+  accessToken?: string;
+  refresh_token?: string;
+  refreshToken?: string;
+  bot_id?: string;
+  botId?: string;
+  workspace_id?: string;
+  workspaceId?: string;
+  workspace_icon?: string;
+  workspaceIcon?: string;
+  workspace_name?: string;
+  workspaceName?: string;
+};
+
+let mainWindow: BrowserWindow | null = null;
+let oauthCallbackServer: Server | null = null;
+let latestOAuthEvent: NotionOAuthEvent = {
+  status: "idle",
+  message: "Notion OAuth has not started."
+};
+
+const pendingOAuthStates = new Map<string, number>();
+
+function getWorkspaceStorePath(): string {
+  return join(app.getPath("userData"), "notion-oauth-workspaces.json");
+}
+
+function toPublicWorkspace(workspace: StoredNotionWorkspace): PublicNotionWorkspace {
+  const {
+    accessTokenCiphertext: _accessTokenCiphertext,
+    refreshTokenCiphertext: _refreshTokenCiphertext,
+    ...publicWorkspace
+  } = workspace;
+
+  return publicWorkspace;
+}
+
+function protectSecret(secret: string): string {
+  if (safeStorage.isEncryptionAvailable()) {
+    return `safe:${safeStorage.encryptString(secret).toString("base64")}`;
+  }
+
+  return `base64:${Buffer.from(secret, "utf8").toString("base64")}`;
+}
+
+function createWorkspaceStore(
+  workspaces: StoredNotionWorkspace[],
+  activeWorkspaceId?: string
+): NotionWorkspaceStore {
+  const store: NotionWorkspaceStore = {
+    workspaces
+  };
+
+  if (activeWorkspaceId) {
+    store.activeWorkspaceId = activeWorkspaceId;
+  }
+
+  return store;
+}
+
+async function loadWorkspaceStore(): Promise<NotionWorkspaceStore> {
+  try {
+    const rawStore = await readFile(getWorkspaceStorePath(), "utf8");
+    const parsed = JSON.parse(rawStore) as Partial<NotionWorkspaceStore>;
+
+    return createWorkspaceStore(
+      Array.isArray(parsed.workspaces) ? parsed.workspaces : [],
+      parsed.activeWorkspaceId
+    );
+  } catch {
+    return {
+      workspaces: []
+    };
+  }
+}
+
+async function saveWorkspaceStore(store: NotionWorkspaceStore): Promise<void> {
+  const storePath = getWorkspaceStorePath();
+
+  await mkdir(dirname(storePath), { recursive: true });
+  await writeFile(storePath, JSON.stringify(store, null, 2), "utf8");
+}
+
+async function upsertWorkspace(workspace: StoredNotionWorkspace): Promise<PublicNotionWorkspace> {
+  const store = await loadWorkspaceStore();
+  const nextWorkspaces = store.workspaces.filter((item) => item.workspaceId !== workspace.workspaceId);
+  const nextStore = createWorkspaceStore([workspace, ...nextWorkspaces], workspace.workspaceId);
+
+  await saveWorkspaceStore(nextStore);
+
+  return toPublicWorkspace(workspace);
+}
+
+function setLatestOAuthEvent(event: NotionOAuthEvent): void {
+  latestOAuthEvent = event;
+  mainWindow?.webContents.send("notion:oauth-event", event);
+}
+
+function getDefaultNotionOAuthRedirectUri(): string {
+  return `http://${NOTION_OAUTH_CALLBACK_HOST}:${NOTION_OAUTH_CALLBACK_PORT}${NOTION_OAUTH_CALLBACK_PATH}`;
+}
+
+function createNotionOAuthUrl(): { state: string; url: string } | null {
   const clientId = process.env.NOTION_OAUTH_CLIENT_ID;
 
   if (!clientId) {
     return null;
   }
 
-  const redirectUri = process.env.NOTION_OAUTH_REDIRECT_URI ?? "samovar-notes-mcp://notion/callback";
+  const redirectUri = process.env.NOTION_OAUTH_REDIRECT_URI ?? getDefaultNotionOAuthRedirectUri();
   const authorizationUrl = new URL(NOTION_OAUTH_AUTHORIZE_URL);
+  const state = randomUUID();
+
+  pendingOAuthStates.set(state, Date.now());
 
   authorizationUrl.searchParams.set("client_id", clientId);
   authorizationUrl.searchParams.set("response_type", "code");
   authorizationUrl.searchParams.set("owner", "user");
   authorizationUrl.searchParams.set("redirect_uri", redirectUri);
-  authorizationUrl.searchParams.set("state", randomUUID());
+  authorizationUrl.searchParams.set("state", state);
 
-  return authorizationUrl.toString();
+  return {
+    state,
+    url: authorizationUrl.toString()
+  };
+}
+
+function consumeOAuthState(state: string | null): boolean {
+  if (!state || !pendingOAuthStates.has(state)) {
+    return false;
+  }
+
+  pendingOAuthStates.delete(state);
+
+  return true;
+}
+
+function isNotionOAuthCallbackUrl(parsedUrl: URL): boolean {
+  const isCustomProtocolCallback =
+    parsedUrl.protocol === `${APP_PROTOCOL}:` && parsedUrl.hostname === "notion";
+  const isLoopbackCallback =
+    parsedUrl.protocol === "http:" &&
+    ["127.0.0.1", "localhost"].includes(parsedUrl.hostname) &&
+    parsedUrl.port === String(NOTION_OAUTH_CALLBACK_PORT) &&
+    parsedUrl.pathname === NOTION_OAUTH_CALLBACK_PATH;
+
+  return isCustomProtocolCallback || isLoopbackCallback;
+}
+
+async function exchangeNotionOAuthCode(input: {
+  code: string;
+  redirectUri: string;
+  state: string;
+}): Promise<StoredNotionWorkspace> {
+  if (!NOTION_OAUTH_TOKEN_EXCHANGE_URL) {
+    throw new Error("missing-token-exchange-url");
+  }
+
+  const response = await fetch(NOTION_OAUTH_TOKEN_EXCHANGE_URL, {
+    method: "POST",
+    headers: {
+      Accept: "application/json",
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify(input)
+  });
+
+  if (!response.ok) {
+    throw new Error(`token-exchange-failed:${response.status}`);
+  }
+
+  const body = (await response.json()) as NotionTokenExchangeResponse;
+  const accessToken = body.access_token ?? body.accessToken;
+  const workspaceId = body.workspace_id ?? body.workspaceId;
+
+  if (!accessToken || !workspaceId) {
+    throw new Error("invalid-token-exchange-response");
+  }
+
+  const now = new Date().toISOString();
+  const workspace: StoredNotionWorkspace = {
+    workspaceId,
+    accessTokenCiphertext: protectSecret(accessToken),
+    connectedAt: now,
+    updatedAt: now
+  };
+  const workspaceName = body.workspace_name ?? body.workspaceName;
+  const workspaceIcon = body.workspace_icon ?? body.workspaceIcon;
+  const botId = body.bot_id ?? body.botId;
+  const refreshToken = body.refresh_token ?? body.refreshToken;
+
+  if (workspaceName) {
+    workspace.workspaceName = workspaceName;
+  }
+
+  if (workspaceIcon) {
+    workspace.workspaceIcon = workspaceIcon;
+  }
+
+  if (botId) {
+    workspace.botId = botId;
+  }
+
+  if (refreshToken) {
+    workspace.refreshTokenCiphertext = protectSecret(refreshToken);
+  }
+
+  return workspace;
+}
+
+async function handleNotionOAuthCallback(callbackUrl: string): Promise<void> {
+  const parsedUrl = new URL(callbackUrl);
+
+  if (!isNotionOAuthCallbackUrl(parsedUrl)) {
+    return;
+  }
+
+  const state = parsedUrl.searchParams.get("state");
+  const error = parsedUrl.searchParams.get("error");
+
+  if (error) {
+    consumeOAuthState(state);
+    setLatestOAuthEvent({
+      status: "cancelled",
+      message: "Notion authorization was cancelled.",
+      error
+    });
+    return;
+  }
+
+  const code = parsedUrl.searchParams.get("code");
+
+  if (!consumeOAuthState(state)) {
+    setLatestOAuthEvent({
+      status: "error",
+      message: "Notion OAuth callback state did not match the current login attempt.",
+      error: "invalid-state"
+    });
+    return;
+  }
+
+  if (!code || !state) {
+    setLatestOAuthEvent({
+      status: "error",
+      message: "Notion OAuth callback did not include an authorization code.",
+      error: "missing-code"
+    });
+    return;
+  }
+
+  const redirectUri = process.env.NOTION_OAUTH_REDIRECT_URI ?? getDefaultNotionOAuthRedirectUri();
+
+  try {
+    const workspace = await exchangeNotionOAuthCode({
+      code,
+      redirectUri,
+      state
+    });
+    const publicWorkspace = await upsertWorkspace(workspace);
+
+    setLatestOAuthEvent({
+      status: "connected",
+      message: "Notion workspace connected.",
+      workspace: publicWorkspace
+    });
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : "unknown-error";
+
+    setLatestOAuthEvent({
+      status: errorMessage === "missing-token-exchange-url" ? "needs-token-exchange" : "error",
+      message:
+        errorMessage === "missing-token-exchange-url"
+          ? "Notion returned an OAuth code. Configure a backend token exchange URL to finish connecting."
+          : "Notion OAuth token exchange failed.",
+      error: errorMessage
+    });
+  }
+}
+
+async function handleOAuthHttpRequest(request: IncomingMessage, response: ServerResponse): Promise<void> {
+  const callbackUrl = new URL(request.url ?? "/", getDefaultNotionOAuthRedirectUri());
+
+  if (!isNotionOAuthCallbackUrl(callbackUrl)) {
+    response.writeHead(404, { "Content-Type": "text/plain; charset=utf-8" });
+    response.end("Not found");
+    return;
+  }
+
+  await handleNotionOAuthCallback(callbackUrl.toString());
+
+  response.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+  response.end(`<!doctype html>
+<html lang="en">
+  <head><meta charset="utf-8" /><title>SamovarNotes MCP</title></head>
+  <body style="font-family: -apple-system, BlinkMacSystemFont, sans-serif; padding: 48px;">
+    <h1>Notion callback received</h1>
+    <p>You can return to SamovarNotes MCP.</p>
+  </body>
+</html>`);
+}
+
+async function ensureOAuthCallbackServer(): Promise<void> {
+  if (oauthCallbackServer) {
+    return;
+  }
+
+  await new Promise<void>((resolvePromise, rejectPromise) => {
+    const server = createServer((request, response) => {
+      void handleOAuthHttpRequest(request, response).catch((error: unknown) => {
+        const message = error instanceof Error ? error.message : "Unknown callback error";
+
+        response.writeHead(500, { "Content-Type": "text/plain; charset=utf-8" });
+        response.end(message);
+      });
+    });
+
+    server.once("error", rejectPromise);
+    server.listen(NOTION_OAUTH_CALLBACK_PORT, NOTION_OAUTH_CALLBACK_HOST, () => {
+      oauthCallbackServer = server;
+      resolvePromise();
+    });
+  });
+}
+
+function findProtocolUrl(argv: string[]): string | undefined {
+  return argv.find((value) => value.startsWith(`${APP_PROTOCOL}://`));
+}
+
+function registerAppProtocol(): void {
+  if (process.defaultApp) {
+    const scriptPath = process.argv[1];
+
+    if (scriptPath) {
+      app.setAsDefaultProtocolClient(APP_PROTOCOL, process.execPath, [scriptPath]);
+      return;
+    }
+  }
+
+  app.setAsDefaultProtocolClient(APP_PROTOCOL);
 }
 
 function registerIpcHandlers(): void {
@@ -50,25 +429,75 @@ function registerIpcHandlers(): void {
   });
 
   ipcMain.handle("notion:start-oauth", async () => {
-    const authorizationUrl = createNotionOAuthUrl();
+    const authorization = createNotionOAuthUrl();
 
-    if (!authorizationUrl) {
+    if (!authorization) {
       return {
         ok: false,
         reason: "missing-client-id"
       };
     }
 
-    await shell.openExternal(authorizationUrl);
+    try {
+      await ensureOAuthCallbackServer();
+    } catch {
+      return {
+        ok: false,
+        reason: "callback-server-failed"
+      };
+    }
+
+    await shell.openExternal(authorization.url);
+
+    setLatestOAuthEvent({
+      status: "opened",
+      message: "Notion sign-in opened in the browser."
+    });
 
     return {
       ok: true
     };
   });
+
+  ipcMain.handle("notion:list-workspaces", async () => {
+    const store = await loadWorkspaceStore();
+
+    return {
+      activeWorkspaceId: store.activeWorkspaceId,
+      workspaces: store.workspaces.map(toPublicWorkspace),
+      latestOAuthEvent
+    };
+  });
+
+  ipcMain.handle("notion:set-active-workspace", async (_event, workspaceId: string) => {
+    const store = await loadWorkspaceStore();
+
+    if (!store.workspaces.some((workspace) => workspace.workspaceId === workspaceId)) {
+      throw new Error("Unknown Notion workspace.");
+    }
+
+    await saveWorkspaceStore({
+      ...store,
+      activeWorkspaceId: workspaceId
+    });
+
+    return { ok: true };
+  });
+
+  ipcMain.handle("notion:remove-workspace", async (_event, workspaceId: string) => {
+    const store = await loadWorkspaceStore();
+    const nextWorkspaces = store.workspaces.filter((workspace) => workspace.workspaceId !== workspaceId);
+    const nextActiveWorkspaceId =
+      store.activeWorkspaceId === workspaceId ? nextWorkspaces[0]?.workspaceId : store.activeWorkspaceId;
+
+    await saveWorkspaceStore(createWorkspaceStore(nextWorkspaces, nextActiveWorkspaceId));
+
+    return { ok: true };
+  });
 }
 
 function createMainWindow(): void {
-  const mainWindow = new BrowserWindow({
+  const browserWindow = new BrowserWindow({
     width: 1180,
     height: 760,
     minWidth: 960,
@@ -79,31 +508,75 @@ function createMainWindow(): void {
     webPreferences: {
       contextIsolation: true,
       nodeIntegration: false,
-      preload: join(__dirname, "../preload/index.mjs"),
+      preload: join(__dirname, "../preload/index.cjs"),
       sandbox: true
     }
   });
 
-  mainWindow.once("ready-to-show", () => {
-    mainWindow.show();
+  mainWindow = browserWindow;
+
+  browserWindow.webContents.on("did-fail-load", (_event, errorCode, errorDescription, validatedUrl) => {
+    console.error(`[renderer] Failed to load ${validatedUrl}: ${errorCode} ${errorDescription}`);
   });
 
-  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
+  browserWindow.webContents.on("render-process-gone", (_event, details) => {
+    console.error(`[renderer] Process gone: ${details.reason}`);
+  });
+
+  browserWindow.once("ready-to-show", () => {
+    browserWindow.show();
+  });
+
+  browserWindow.webContents.setWindowOpenHandler(({ url }) => {
     void shell.openExternal(url);
     return { action: "deny" };
   });
 
   if (process.env.ELECTRON_RENDERER_URL) {
-    void mainWindow.loadURL(process.env.ELECTRON_RENDERER_URL);
+    void browserWindow.loadURL(process.env.ELECTRON_RENDERER_URL);
     return;
   }
 
-  void mainWindow.loadFile(join(__dirname, "../renderer/index.html"));
+  void browserWindow.loadFile(join(__dirname, "../renderer/index.html"));
 }
 
+const gotSingleInstanceLock = app.requestSingleInstanceLock();
+
+if (!gotSingleInstanceLock) {
+  app.quit();
+}
+
+app.on("open-url", (event, url) => {
+  event.preventDefault();
+  void handleNotionOAuthCallback(url);
+});
+
+app.on("second-instance", (_event, argv) => {
+  const callbackUrl = findProtocolUrl(argv);
+
+  if (callbackUrl) {
+    void handleNotionOAuthCallback(callbackUrl);
+  }
+
+  if (mainWindow) {
+    if (mainWindow.isMinimized()) {
+      mainWindow.restore();
+    }
+
+    mainWindow.focus();
+  }
+});
+
 app.whenReady().then(() => {
+  registerAppProtocol();
   registerIpcHandlers();
   createMainWindow();
+
+  const launchCallbackUrl = findProtocolUrl(process.argv);
+
+  if (launchCallbackUrl) {
+    void handleNotionOAuthCallback(launchCallbackUrl);
+  }
 
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) {
@@ -113,6 +586,8 @@ app.whenReady().then(() => {
 });
 
 app.on("window-all-closed", () => {
+  oauthCallbackServer?.close();
+
   if (process.platform !== "darwin") {
     app.quit();
   }
