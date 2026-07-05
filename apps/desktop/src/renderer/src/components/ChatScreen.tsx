@@ -1,12 +1,11 @@
 import { CheckCircle2 } from "lucide-react";
 import type { FormEventHandler, KeyboardEventHandler } from "react";
 import { samplePrompt } from "../chat";
-import type { ChatMessage, NotionWorkspace } from "../types";
+import type { ChatMessage } from "../types";
 import { ChatComposer } from "./ChatComposer";
 import { ChatThread } from "./ChatThread";
 
 type ChatScreenProps = {
-  activeWorkspace: NotionWorkspace | undefined;
   chatInput: string;
   copiedMessageId: string | null;
   isComposerDisabled: boolean;
@@ -20,7 +19,6 @@ type ChatScreenProps = {
 };
 
 export function ChatScreen({
-  activeWorkspace,
   chatInput,
   copiedMessageId,
   isComposerDisabled,
@@ -47,7 +45,7 @@ export function ChatScreen({
         <section className="chat-empty" aria-labelledby="chat-empty-title">
           <div className="chat-workspace-pill">
             <CheckCircle2 size={17} />
-            {activeWorkspace?.workspaceName ?? "Notion connected"}
+            Local keys connected
           </div>
           <h2 id="chat-empty-title">What are we creating in Notion?</h2>
           <ChatComposer

@@ -1,29 +1,26 @@
 import {
   NOTION_API_BASE_URL,
   NOTION_API_VERSION,
-  NOTION_LEGACY_DATABASE_VERSION,
-  NOTION_OAUTH_TOKEN_EXCHANGE_URL
+  NOTION_LEGACY_DATABASE_VERSION
 } from "../config";
 import type { NotionChatCommandInput, NotionChatCommandResult, NotionObjectResponse, ParsedNotionCommand } from "../types";
+import { getNotionAccessToken, getNotionParentPageId } from "../settingsStore";
 import { createParagraphBlock, createTableBlock } from "./blocks";
 import { textRichText, titleProperty } from "./richText";
-import { getWorkspaceAccessToken, hasTokenExchangeConfiguration } from "./workspaces";
 
 function mapNotionError(error: unknown): string {
   const message = error instanceof Error ? error.message : "unknown-error";
 
-  if (message === "missing-notion-workspace") {
-    return "Connect Notion first, then send the command again.";
+  if (message === "missing-notion-token") {
+    return "Add a Notion integration token in Settings, then send the command again.";
   }
 
-  if (message === "token-exchange-required") {
-    return hasTokenExchangeConfiguration() || NOTION_OAUTH_TOKEN_EXCHANGE_URL
-      ? "This Notion workspace was connected before token exchange was available. Open settings and click Add Notion workspace to reconnect it."
-      : "Notion is authorized, but this workspace has no access token yet. Add NOTION_OAUTH_CLIENT_SECRET to .env, restart the app, and reconnect Notion.";
+  if (message.includes("notion-api-failed:400")) {
+    return "Notion could not create the page. If your integration cannot create root pages, add a parent page ID in Settings and share that page with the integration.";
   }
 
   if (message.includes("notion-api-failed:403")) {
-    return "Notion refused the request. Check that the OAuth connection has Insert Content permissions and access to the target workspace.";
+    return "Notion refused the request. Check that the integration token has Insert Content permissions and access to the parent page.";
   }
 
   if (message.includes("notion-api-failed:401")) {
@@ -166,13 +163,19 @@ async function notionRequest<T>(
 async function createNotionPage(
   accessToken: string,
   title: string,
+  parentPageId: string | undefined,
   children: Record<string, unknown>[] = []
 ): Promise<NotionObjectResponse> {
   return notionRequest<NotionObjectResponse>(accessToken, "/pages", {
-    parent: {
-      type: "workspace",
-      workspace: true
-    },
+    parent: parentPageId
+      ? {
+          type: "page_id",
+          page_id: parentPageId
+        }
+      : {
+          type: "workspace",
+          workspace: true
+        },
     properties: {
       title: titleProperty(title)
     },
@@ -202,9 +205,10 @@ function createLegacyDatabaseRowProperties(columns: string[], rowIndex: number):
 
 async function createNotionDatabase(
   accessToken: string,
+  parentPageId: string | undefined,
   command: ParsedNotionCommand
 ): Promise<NotionObjectResponse> {
-  const parentPage = await createNotionPage(accessToken, command.title, [
+  const parentPage = await createNotionPage(accessToken, command.title, parentPageId, [
     createParagraphBlock("SamovarNotes created this page as a parent for the requested database.")
   ]);
 
@@ -250,11 +254,12 @@ export async function executeNotionChatCommand(input: NotionChatCommandInput): P
   }
 
   try {
-    const accessToken = await getWorkspaceAccessToken(input.workspaceId);
+    const accessToken = await getNotionAccessToken();
+    const parentPageId = await getNotionParentPageId();
     const command = parseNotionCommand(message);
 
     if (command.kind === "database") {
-      const database = await createNotionDatabase(accessToken, command);
+      const database = await createNotionDatabase(accessToken, parentPageId, command);
 
       return createNotionSuccess(
         `Created a Notion database with ${command.columnCount} columns and ${command.rowCount} rows.${database.url ? `\n${database.url}` : ""}`,
@@ -263,7 +268,7 @@ export async function executeNotionChatCommand(input: NotionChatCommandInput): P
     }
 
     if (command.kind === "table") {
-      const page = await createNotionPage(accessToken, command.title, [
+      const page = await createNotionPage(accessToken, command.title, parentPageId, [
         createParagraphBlock("SamovarNotes created this table from your chat command."),
         createTableBlock(command)
       ]);
@@ -274,7 +279,7 @@ export async function executeNotionChatCommand(input: NotionChatCommandInput): P
       );
     }
 
-    const page = await createNotionPage(accessToken, command.title);
+    const page = await createNotionPage(accessToken, command.title, parentPageId);
 
     return createNotionSuccess(`Created an empty Notion page.${page.url ? `\n${page.url}` : ""}`, page.url);
   } catch (error) {

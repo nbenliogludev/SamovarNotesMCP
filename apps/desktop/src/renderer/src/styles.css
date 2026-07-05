@@ -161,7 +161,7 @@ h1 {
   min-height: 0;
 }
 
-.connect-grid {
+.settings-grid {
   display: grid;
   grid-template-columns: minmax(420px, 1.1fr) minmax(300px, 0.8fr);
   gap: 18px;
@@ -211,10 +211,11 @@ h1 {
   font-weight: 800;
 }
 
-.oauth-panel {
+.setup-links {
   display: grid;
   width: min(100%, 520px);
-  gap: 14px;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
 }
 
 .notion-button {
@@ -251,12 +252,48 @@ h1 {
   color: #a7edb5;
 }
 
-.inline-notice.is-needs-token-exchange {
-  color: #ffd27a;
+.token-settings-panel {
+  min-height: 520px;
 }
 
-.oauth-flow-panel {
-  min-height: 520px;
+.connection-results {
+  display: grid;
+  gap: 10px;
+}
+
+.connection-result {
+  display: grid;
+  grid-template-columns: 18px 72px minmax(0, 1fr);
+  gap: 8px;
+  align-items: center;
+  padding: 10px;
+  background: #fffdf8;
+  border: 1px solid #ded6ca;
+  border-radius: 8px;
+}
+
+.connection-result.is-ok {
+  color: #28574f;
+  border-color: #cfe2d2;
+}
+
+.connection-result.is-error {
+  color: #8a4d3b;
+  border-color: #e9c4b4;
+}
+
+.connection-result span {
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.connection-result strong {
+  min-width: 0;
+  overflow: hidden;
+  font-size: 12px;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .workspace-list {

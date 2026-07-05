@@ -1,6 +1,6 @@
-import type { NotionOAuthEvent, NotionWorkspace } from "../../preload";
+import type { ConnectionTestResult, PublicConnectionSettings } from "../../preload";
 
-export type { NotionOAuthEvent, NotionWorkspace };
+export type { ConnectionTestResult, PublicConnectionSettings };
 
 export type AppInfo = {
   name: string;
@@ -17,4 +17,11 @@ export type ChatMessage = {
   createdAt: string;
 };
 
-export type Screen = "connect" | "chat";
+export type SettingsFormState = {
+  openAiApiKey: string;
+  openAiModel: string;
+  notionToken: string;
+  notionParentPageId: string;
+};
+
+export type Screen = "settings" | "chat";

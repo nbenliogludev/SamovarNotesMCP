@@ -3,10 +3,10 @@ import type { AppInfo } from "../types";
 
 type SidebarProps = {
   appInfo: AppInfo | null;
-  notionWorkspaceCount: number;
+  isConfigured: boolean;
 };
 
-export function Sidebar({ appInfo, notionWorkspaceCount }: SidebarProps) {
+export function Sidebar({ appInfo, isConfigured }: SidebarProps) {
   return (
     <aside className="sidebar" aria-label="Application status">
       <div className="brand-lockup">
@@ -37,12 +37,8 @@ export function Sidebar({ appInfo, notionWorkspaceCount }: SidebarProps) {
         </div>
         <div className="status-row">
           <CheckCircle2 size={18} />
-          <span>Notion</span>
-          <strong>
-            {notionWorkspaceCount > 0
-              ? `${notionWorkspaceCount} workspace${notionWorkspaceCount === 1 ? "" : "s"}`
-              : "Not connected"}
-          </strong>
+          <span>Connection</span>
+          <strong>{isConfigured ? "Ready" : "Setup needed"}</strong>
         </div>
       </div>
     </aside>
