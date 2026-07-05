@@ -3,6 +3,7 @@ import { z } from "zod";
 export const appSettingsSchema = z.object({
   openAiApiKey: z.string().trim().optional(),
   openAiModel: z.string().trim().default("gpt-4.1-mini"),
+  notionToken: z.string().trim().optional(),
   notionParentPageId: z.string().trim().optional(),
   webResearchEnabled: z.boolean().default(false)
 });

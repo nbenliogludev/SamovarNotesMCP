@@ -12,6 +12,7 @@
     "desktop:dev": "npm --workspace @samovar-notes-mcp/desktop run dev",
     "start:dev": "npm run desktop:dev",
     "desktop:build": "npm --workspace @samovar-notes-mcp/desktop run build",
+    "desktop:dist": "npm --workspace @samovar-notes-mcp/desktop run dist:mac",
     "mcp:dev": "npm --workspace @samovar-notes-mcp/mcp-server run dev",
     "mcp:build": "npm --workspace @samovar-notes-mcp/mcp-server run build",
     "typecheck": "npm run typecheck --workspaces --if-present",

@@ -1,28 +1,33 @@
 import { contextBridge, ipcRenderer } from "electron";
 
-type NotionOAuthStatus =
-  | "idle"
-  | "opened"
-  | "connected"
-  | "needs-token-exchange"
-  | "cancelled"
-  | "error";
-
-export type NotionWorkspace = {
-  workspaceId: string;
-  workspaceName?: string;
-  workspaceIcon?: string;
-  botId?: string;
-  authStatus?: "connected" | "token-exchange-pending";
-  connectedAt: string;
-  updatedAt: string;
+export type PublicConnectionSettings = {
+  hasOpenAiApiKey: boolean;
+  hasNotionToken: boolean;
+  isConfigured: boolean;
+  openAiModel: string;
+  notionParentPageId?: string;
+  updatedAt?: string;
 };
 
-export type NotionOAuthEvent = {
-  status: NotionOAuthStatus;
-  message: string;
-  workspace?: NotionWorkspace;
-  error?: string;
+export type SaveConnectionSettingsInput = {
+  openAiApiKey?: string;
+  openAiModel?: string;
+  notionToken?: string;
+  notionParentPageId?: string;
+  clearOpenAiApiKey?: boolean;
+  clearNotionToken?: boolean;
+};
+
+export type ConnectionTestResult = {
+  ok: boolean;
+  openAi: {
+    ok: boolean;
+    message: string;
+  };
+  notion: {
+    ok: boolean;
+    message: string;
+  };
 };
 
 export type NotionChatCommandResult = {
@@ -41,39 +46,13 @@ const samovarApi = {
       packaged: boolean;
     }>,
   openExternal: (url: string) => ipcRenderer.invoke("app:open-external", url) as Promise<{ ok: boolean }>,
-  startNotionOAuth: () =>
-    ipcRenderer.invoke("notion:start-oauth") as Promise<
-      | {
-          ok: true;
-        }
-      | {
-          ok: false;
-          reason: "missing-client-id" | "callback-server-failed";
-        }
-    >,
-  listNotionWorkspaces: () =>
-    ipcRenderer.invoke("notion:list-workspaces") as Promise<{
-      activeWorkspaceId?: string;
-      workspaces: NotionWorkspace[];
-      latestOAuthEvent: NotionOAuthEvent;
-    }>,
-  setActiveNotionWorkspace: (workspaceId: string) =>
-    ipcRenderer.invoke("notion:set-active-workspace", workspaceId) as Promise<{ ok: boolean }>,
-  removeNotionWorkspace: (workspaceId: string) =>
-    ipcRenderer.invoke("notion:remove-workspace", workspaceId) as Promise<{ ok: boolean }>,
-  executeNotionChatCommand: (input: { message: string; workspaceId?: string }) =>
-    ipcRenderer.invoke("notion:execute-chat-command", input) as Promise<NotionChatCommandResult>,
-  onNotionOAuthEvent: (callback: (event: NotionOAuthEvent) => void) => {
-    const listener = (_event: Electron.IpcRendererEvent, oauthEvent: NotionOAuthEvent) => {
-      callback(oauthEvent);
-    };
-
-    ipcRenderer.on("notion:oauth-event", listener);
-
-    return () => {
-      ipcRenderer.removeListener("notion:oauth-event", listener);
-    };
-  }
+  getConnectionSettings: () =>
+    ipcRenderer.invoke("settings:get") as Promise<PublicConnectionSettings>,
+  saveConnectionSettings: (input: SaveConnectionSettingsInput) =>
+    ipcRenderer.invoke("settings:save", input) as Promise<PublicConnectionSettings>,
+  testConnections: () => ipcRenderer.invoke("settings:test") as Promise<ConnectionTestResult>,
+  executeNotionChatCommand: (input: { message: string }) =>
+    ipcRenderer.invoke("notion:execute-chat-command", input) as Promise<NotionChatCommandResult>
 };
 
 contextBridge.exposeInMainWorld("samovar", samovarApi);
