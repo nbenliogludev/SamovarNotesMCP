@@ -7,6 +7,25 @@ type SidebarProps = {
 };
 
 export function Sidebar({ appInfo, isConfigured }: SidebarProps) {
+  const statusItems = [
+    {
+      label: "Window",
+      value: appInfo?.packaged ? "Packaged" : "Development"
+    },
+    {
+      label: "Platform",
+      value: appInfo?.platform ?? "Loading"
+    },
+    {
+      label: "Version",
+      value: appInfo?.version ?? "0.1.0"
+    },
+    {
+      label: "Connection",
+      value: isConfigured ? "Ready" : "Setup needed"
+    }
+  ];
+
   return (
     <aside className="sidebar" aria-label="Application status">
       <div className="brand-lockup">
@@ -19,27 +38,19 @@ export function Sidebar({ appInfo, isConfigured }: SidebarProps) {
         </div>
       </div>
 
-      <div className="status-list">
-        <div className="status-row">
+      <div className="status-card">
+        <div className="status-card-heading">
           <CheckCircle2 size={18} />
-          <span>Electron window</span>
-          <strong>{appInfo?.packaged ? "Packaged" : "Development"}</strong>
+          <span>Runtime</span>
         </div>
-        <div className="status-row">
-          <CheckCircle2 size={18} />
-          <span>Platform</span>
-          <strong>{appInfo?.platform ?? "loading"}</strong>
-        </div>
-        <div className="status-row">
-          <CheckCircle2 size={18} />
-          <span>Version</span>
-          <strong>{appInfo?.version ?? "0.1.0"}</strong>
-        </div>
-        <div className="status-row">
-          <CheckCircle2 size={18} />
-          <span>Connection</span>
-          <strong>{isConfigured ? "Ready" : "Setup needed"}</strong>
-        </div>
+        <dl className="status-details">
+          {statusItems.map((item) => (
+            <div key={item.label}>
+              <dt>{item.label}</dt>
+              <dd>{item.value}</dd>
+            </div>
+          ))}
+        </dl>
       </div>
     </aside>
   );

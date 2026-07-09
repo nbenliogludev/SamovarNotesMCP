@@ -1,6 +1,5 @@
 export type NotionTokenConnection = {
   accessToken: string;
-  parentPageId?: string;
 };
 
 export interface NotionTokenConnectionService {
@@ -8,15 +7,11 @@ export interface NotionTokenConnectionService {
 }
 
 export class StaticNotionTokenConnectionService implements NotionTokenConnectionService {
-  constructor(
-    private readonly token: string,
-    private readonly parentPageId?: string
-  ) {}
+  constructor(private readonly token: string) {}
 
   async getConnection(): Promise<NotionTokenConnection> {
     return {
-      accessToken: this.token,
-      ...(this.parentPageId ? { parentPageId: this.parentPageId } : {})
+      accessToken: this.token
     };
   }
 }

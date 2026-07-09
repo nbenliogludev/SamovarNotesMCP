@@ -36,7 +36,7 @@ async function testOpenAiConnection(): Promise<ConnectionTestResult["openAi"]> {
 async function testNotionConnection(): Promise<ConnectionTestResult["notion"]> {
   try {
     const token = await getNotionAccessToken();
-    const response = await fetch(`${NOTION_API_BASE_URL}/users/me`, {
+    const userResponse = await fetch(`${NOTION_API_BASE_URL}/users/me`, {
       method: "GET",
       headers: {
         Accept: "application/json",
@@ -45,10 +45,10 @@ async function testNotionConnection(): Promise<ConnectionTestResult["notion"]> {
       }
     });
 
-    if (!response.ok) {
+    if (!userResponse.ok) {
       return {
         ok: false,
-        message: `Notion rejected the token (${response.status}).`
+        message: `Notion rejected the token (${userResponse.status}).`
       };
     }
 
@@ -60,7 +60,7 @@ async function testNotionConnection(): Promise<ConnectionTestResult["notion"]> {
     return {
       ok: false,
       message: error instanceof Error && error.message === "missing-notion-token"
-        ? "Add a Notion integration token."
+        ? "Add a Notion Personal access token."
         : "Notion connection test failed."
     };
   }

@@ -16,15 +16,13 @@ import type {
 const defaultSettingsForm: SettingsFormState = {
   openAiApiKey: "",
   openAiModel: "gpt-4.1-mini",
-  notionToken: "",
-  notionParentPageId: ""
+  notionToken: ""
 };
 
 function createSettingsForm(settings: PublicConnectionSettings | null): SettingsFormState {
   return {
     ...defaultSettingsForm,
-    openAiModel: settings?.openAiModel ?? defaultSettingsForm.openAiModel,
-    notionParentPageId: settings?.notionParentPageId ?? ""
+    openAiModel: settings?.openAiModel ?? defaultSettingsForm.openAiModel
   };
 }
 
@@ -95,8 +93,7 @@ export function App() {
       const savedSettings = await window.samovar.saveConnectionSettings({
         openAiApiKey: settingsForm.openAiApiKey,
         openAiModel: settingsForm.openAiModel,
-        notionToken: settingsForm.notionToken,
-        notionParentPageId: settingsForm.notionParentPageId
+        notionToken: settingsForm.notionToken
       });
       const connectionTest = await window.samovar.testConnections();
 
