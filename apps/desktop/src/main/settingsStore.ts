@@ -31,10 +31,6 @@ export function toPublicSettings(settings: StoredConnectionSettings): PublicConn
 
   publicSettings.isConfigured = publicSettings.hasOpenAiApiKey && publicSettings.hasNotionToken;
 
-  if (settings.notionParentPageId) {
-    publicSettings.notionParentPageId = settings.notionParentPageId;
-  }
-
   if (settings.updatedAt) {
     publicSettings.updatedAt = settings.updatedAt;
   }
@@ -46,12 +42,23 @@ export async function loadConnectionSettings(): Promise<StoredConnectionSettings
   try {
     const rawSettings = await readFile(getSettingsStorePath(), "utf8");
     const parsed = JSON.parse(rawSettings) as Partial<StoredConnectionSettings>;
-
-    return {
-      ...createDefaultSettings(),
-      ...parsed,
+    const settings: StoredConnectionSettings = {
       openAiModel: trimOptional(parsed.openAiModel) ?? getOptionalEnv("OPENAI_MODEL") ?? DEFAULT_OPENAI_MODEL
     };
+
+    if (parsed.openAiApiKeyCiphertext) {
+      settings.openAiApiKeyCiphertext = parsed.openAiApiKeyCiphertext;
+    }
+
+    if (parsed.notionTokenCiphertext) {
+      settings.notionTokenCiphertext = parsed.notionTokenCiphertext;
+    }
+
+    if (parsed.updatedAt) {
+      settings.updatedAt = parsed.updatedAt;
+    }
+
+    return settings;
   } catch {
     return createDefaultSettings();
   }
@@ -79,7 +86,6 @@ export async function updateConnectionSettings(
   };
   const openAiApiKey = trimOptional(input.openAiApiKey);
   const notionToken = trimOptional(input.notionToken);
-  const notionParentPageId = trimOptional(input.notionParentPageId);
 
   if (openAiApiKey) {
     nextSettings.openAiApiKeyCiphertext = protectSecret(openAiApiKey);
@@ -91,12 +97,6 @@ export async function updateConnectionSettings(
     nextSettings.notionTokenCiphertext = protectSecret(notionToken);
   } else if (input.clearNotionToken) {
     delete nextSettings.notionTokenCiphertext;
-  }
-
-  if (notionParentPageId) {
-    nextSettings.notionParentPageId = notionParentPageId;
-  } else {
-    delete nextSettings.notionParentPageId;
   }
 
   await saveConnectionSettings(nextSettings);
@@ -138,10 +138,4 @@ export async function getNotionAccessToken(): Promise<string> {
   }
 
   throw new Error("missing-notion-token");
-}
-
-export async function getNotionParentPageId(): Promise<string | undefined> {
-  const settings = await loadConnectionSettings();
-
-  return settings.notionParentPageId ?? getOptionalEnv("NOTION_PARENT_PAGE_ID");
 }

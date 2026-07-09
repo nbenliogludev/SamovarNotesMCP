@@ -21,7 +21,6 @@ export type SettingsFormState = {
   openAiApiKey: string;
   openAiModel: string;
   notionToken: string;
-  notionParentPageId: string;
 };
 
 export type Screen = "settings" | "chat";

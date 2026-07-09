@@ -5,7 +5,6 @@ export type PublicConnectionSettings = {
   hasNotionToken: boolean;
   isConfigured: boolean;
   openAiModel: string;
-  notionParentPageId?: string;
   updatedAt?: string;
 };
 
@@ -13,7 +12,6 @@ export type SaveConnectionSettingsInput = {
   openAiApiKey?: string;
   openAiModel?: string;
   notionToken?: string;
-  notionParentPageId?: string;
   clearOpenAiApiKey?: boolean;
   clearNotionToken?: boolean;
 };

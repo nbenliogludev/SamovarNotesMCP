@@ -20,10 +20,14 @@ OpenAI-powered live research is not wired into the app yet. The app stores and t
 For the packaged DMG flow, users only need:
 
 1. An OpenAI API key.
-2. A Notion internal integration token.
-3. Optionally, a Notion parent page ID.
+2. A Notion Personal access token.
 
-The Notion integration must have access to the page where SamovarNotes should create content. In Notion, open the target page, use `Share`, and invite the integration.
+In the app setup screen:
+
+- OpenAI API key: create it in OpenAI Platform > API keys.
+- Notion Personal access token: create it in Notion Developers > Personal access tokens. Do not use an OAuth client ID, client secret, or Access token connection.
+
+Personal access tokens act with the access of the Notion user who created them. SamovarNotes uses that token to create requested pages, tables, and databases without asking the user to create a dedicated SamovarNotes page first.
 
 ## Developer Setup
 
