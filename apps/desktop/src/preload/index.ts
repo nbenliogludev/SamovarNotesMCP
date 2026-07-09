@@ -34,6 +34,17 @@ export type NotionChatCommandResult = {
   url?: string;
 };
 
+export type AudioTranscriptionInput = {
+  audioBase64: string;
+  mimeType?: string;
+};
+
+export type AudioTranscriptionResult = {
+  ok: boolean;
+  message: string;
+  text?: string;
+};
+
 const samovarApi = {
   getAppInfo: () =>
     ipcRenderer.invoke("app:get-info") as Promise<{
@@ -50,7 +61,9 @@ const samovarApi = {
     ipcRenderer.invoke("settings:save", input) as Promise<PublicConnectionSettings>,
   testConnections: () => ipcRenderer.invoke("settings:test") as Promise<ConnectionTestResult>,
   executeNotionChatCommand: (input: { message: string }) =>
-    ipcRenderer.invoke("notion:execute-chat-command", input) as Promise<NotionChatCommandResult>
+    ipcRenderer.invoke("notion:execute-chat-command", input) as Promise<NotionChatCommandResult>,
+  transcribeAudio: (input: AudioTranscriptionInput) =>
+    ipcRenderer.invoke("audio:transcribe", input) as Promise<AudioTranscriptionResult>
 };
 
 contextBridge.exposeInMainWorld("samovar", samovarApi);

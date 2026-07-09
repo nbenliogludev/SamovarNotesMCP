@@ -12,6 +12,7 @@ Open-source Electron desktop app for turning prompts into Notion pages, tables, 
   - create an empty page
   - create a page with a table
   - create a database with placeholder rows
+- Voice input in the chat composer: record a short prompt, transcribe it with OpenAI, and insert the text before sending.
 
 OpenAI-powered live research is not wired into the app yet. The app stores and tests the OpenAI key so the next branch can add the research pipeline cleanly.
 
@@ -37,6 +38,8 @@ npm run start:dev
 ```
 
 Optional development overrides can be placed in `.env`, using `.env.example` as a template. The packaged app does not require `.env`.
+
+Voice input uses the saved OpenAI API key and the `gpt-4o-mini-transcribe` model by default. Developers can override it with `OPENAI_TRANSCRIPTION_MODEL`.
 
 ## Build
 

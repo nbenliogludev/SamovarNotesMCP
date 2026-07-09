@@ -43,6 +43,17 @@ export type NotionChatCommandResult = {
   url?: string;
 };
 
+export type AudioTranscriptionInput = {
+  audioBase64: string;
+  mimeType?: string;
+};
+
+export type AudioTranscriptionResult = {
+  ok: boolean;
+  message: string;
+  text?: string;
+};
+
 export type NotionObjectResponse = {
   id: string;
   url?: string;

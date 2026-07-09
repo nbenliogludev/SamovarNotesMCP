@@ -73,6 +73,7 @@ export function App() {
 
   const isConfigured = Boolean(connectionSettings?.isConfigured);
   const isComposerDisabled = !chatInput.trim() || !isConfigured || isResponding;
+  const isVoiceDisabled = !isConfigured || isResponding;
 
   function updateSettingsForm(patch: Partial<SettingsFormState>) {
     setSettingsForm((currentForm) => ({
@@ -170,6 +171,23 @@ export function App() {
     }, 1200);
   }
 
+  function handleVoiceTranscript(transcript: string) {
+    setChatInput((currentValue) => {
+      const currentText = currentValue.trimEnd();
+      const nextText = transcript.trim();
+
+      if (!currentText) {
+        return nextText;
+      }
+
+      if (!nextText) {
+        return currentText;
+      }
+
+      return `${currentText} ${nextText}`;
+    });
+  }
+
   return (
     <main className="app-shell">
       <Sidebar appInfo={appInfo} isConfigured={isConfigured} />
@@ -198,12 +216,14 @@ export function App() {
             copiedMessageId={copiedMessageId}
             isComposerDisabled={isComposerDisabled}
             isResponding={isResponding}
+            isVoiceDisabled={isVoiceDisabled}
             messages={chatMessages}
             onChatInputChange={setChatInput}
             onComposerKeyDown={handleComposerKeyDown}
             onCopyMessage={(message) => void handleCopyMessage(message)}
             onSamplePrompt={() => setChatInput(samplePrompt)}
             onSubmit={handleChatSubmit}
+            onVoiceTranscript={handleVoiceTranscript}
           />
         )}
       </section>
