@@ -4,12 +4,34 @@ import {
   NOTION_LEGACY_DATABASE_VERSION
 } from "../config";
 import type { NotionChatCommandInput, NotionChatCommandResult, NotionObjectResponse, ParsedNotionCommand } from "../types";
+import { planNotionCommand, type PlannedNotionCommand } from "../openai/notionPlanner";
 import { getNotionAccessToken } from "../settingsStore";
-import { createParagraphBlock, createTableBlock } from "./blocks";
+import { createParagraphBlock, createTableBlockFromRows } from "./blocks";
 import { textRichText, titleProperty } from "./richText";
 
-function mapNotionError(error: unknown): string {
+type NotionSearchResult = NotionObjectResponse & {
+  object?: string;
+  properties?: Record<string, unknown>;
+};
+
+type NotionSearchResponse = {
+  results?: NotionSearchResult[];
+};
+
+function mapExecutionError(error: unknown): string {
   const message = error instanceof Error ? error.message : "unknown-error";
+
+  if (message === "missing-openai-api-key") {
+    return "Add an OpenAI API key in Settings, then send the command again.";
+  }
+
+  if (message === "openai-planning-empty-response") {
+    return "OpenAI returned an empty plan. Try sending the request again.";
+  }
+
+  if (message.startsWith("openai-planning-failed:")) {
+    return "OpenAI could not plan or research this request. Check that the selected model supports the Responses API with web search, then try again.";
+  }
 
   if (message === "missing-notion-token") {
     return "Add a Notion Personal access token in Settings, then send the command again.";
@@ -27,7 +49,7 @@ function mapNotionError(error: unknown): string {
     return "Notion access token is invalid or expired. Reconnect the Notion workspace.";
   }
 
-  return `Notion command failed: ${message}`;
+  return `Command failed: ${message}`;
 }
 
 function createNotionSuccess(message: string, url?: string): NotionChatCommandResult {
@@ -43,105 +65,15 @@ function createNotionSuccess(message: string, url?: string): NotionChatCommandRe
       };
 }
 
-function parsePositiveCount(message: string, patterns: RegExp[], fallback: number): number {
-  for (const pattern of patterns) {
-    const match = message.match(pattern);
-    const parsed = Number(match?.[1]);
-
-    if (Number.isInteger(parsed) && parsed > 0) {
-      return Math.min(parsed, 50);
-    }
-  }
-
-  return fallback;
-}
-
-function parseCommandTitle(message: string, kind: ParsedNotionCommand["kind"]): string {
-  const quotedTitle = message.match(/["“](.+?)["”]/)?.[1]?.trim();
-
-  if (quotedTitle) {
-    return quotedTitle.slice(0, 100);
-  }
-
-  const withoutCounts = message
-    .replace(/\b\d+\s*(?:rows?|columns?|cols?)\b/gi, "")
-    .replace(/\b(?:create|make|build|add|please|empty|with|where|you|need|to|and|just|do|what|i|said)\b/gi, "")
-    .replace(/\s+/g, " ")
-    .trim();
-
-  if (withoutCounts.length > 12) {
-    return withoutCounts.slice(0, 100);
-  }
-
-  if (kind === "database") {
-    return "Samovar Database";
-  }
-
-  if (kind === "table") {
-    return "Samovar Table";
-  }
-
-  return "Samovar Page";
-}
-
-function parseColumnNames(message: string, columnCount: number): string[] {
-  const explicitColumns = message.match(/(?:columns?|cols?)\s*:\s*([a-z0-9а-яё,\s_-]+)/i)?.[1];
-
-  if (explicitColumns) {
-    const columns = explicitColumns
-      .split(",")
-      .map((column) => column.trim())
-      .filter(Boolean)
-      .slice(0, columnCount);
-
-    if (columns.length > 0) {
-      return [
-        ...columns,
-        ...Array.from({ length: Math.max(0, columnCount - columns.length) }, (_item, index) => `Column ${columns.length + index + 1}`)
-      ];
-    }
-  }
-
-  return Array.from({ length: columnCount }, (_item, index) => `Column ${index + 1}`);
-}
-
-function parseNotionCommand(message: string): ParsedNotionCommand {
-  const normalizedMessage = message.toLowerCase();
-  const kind: ParsedNotionCommand["kind"] = /database|db|баз[ауы]|датаб/.test(normalizedMessage)
-    ? "database"
-    : /table|таблиц/.test(normalizedMessage)
-      ? "table"
-      : "page";
-  const defaultRows = kind === "page" ? 0 : 3;
-  const defaultColumns = kind === "page" ? 0 : 3;
-  const rowCount = parsePositiveCount(
-    message,
-    [/(\d+)\s*(?:rows?|row|строк|строки|строка|рядов|ряда)/i],
-    defaultRows
-  );
-  const columnCount = parsePositiveCount(
-    message,
-    [/(\d+)\s*(?:columns?|cols?|column|колонок|колонки|колонка|столбцов|столбца)/i],
-    defaultColumns
-  );
-
-  return {
-    kind,
-    title: parseCommandTitle(message, kind),
-    rowCount,
-    columnCount,
-    columns: parseColumnNames(message, columnCount)
-  };
-}
-
 async function notionRequest<T>(
   accessToken: string,
   path: string,
   body: Record<string, unknown>,
-  notionVersion = NOTION_API_VERSION
+  notionVersion = NOTION_API_VERSION,
+  method = "POST"
 ): Promise<T> {
   const response = await fetch(`${NOTION_API_BASE_URL}${path}`, {
-    method: "POST",
+    method,
     headers: {
       Accept: "application/json",
       Authorization: `Bearer ${accessToken}`,
@@ -158,6 +90,82 @@ async function notionRequest<T>(
   }
 
   return JSON.parse(responseBody) as T;
+}
+
+function createPlanBlocks(plan: PlannedNotionCommand): Record<string, unknown>[] {
+  const blocks = plan.paragraphs.map(createParagraphBlock);
+
+  if (plan.table.rows.length > 0 || plan.action === "create_table_page" || plan.action === "append_table_to_page") {
+    blocks.push(createTableBlockFromRows(plan.table.columns, plan.table.rows));
+  }
+
+  return blocks;
+}
+
+function getNotionPropertyTitle(property: unknown): string | undefined {
+  const titleItems = (property as { title?: Array<{ plain_text?: string; text?: { content?: string } }> }).title;
+
+  if (!Array.isArray(titleItems)) {
+    return undefined;
+  }
+
+  return titleItems
+    .map((item) => item.plain_text ?? item.text?.content ?? "")
+    .join("")
+    .trim();
+}
+
+function getNotionPageTitle(result: NotionSearchResult): string | undefined {
+  return Object.values(result.properties ?? {})
+    .map(getNotionPropertyTitle)
+    .find((title): title is string => Boolean(title));
+}
+
+function normalizePageTitle(title: string): string {
+  return title
+    .toLowerCase()
+    .replace(/[^\p{Letter}\p{Number}]+/gu, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+async function findNotionPageByTitle(accessToken: string, title: string): Promise<NotionSearchResult | undefined> {
+  const normalizedTitle = normalizePageTitle(title);
+
+  if (!normalizedTitle) {
+    return undefined;
+  }
+
+  const searchResult = await notionRequest<NotionSearchResponse>(accessToken, "/search", {
+    query: title,
+    filter: {
+      value: "page",
+      property: "object"
+    },
+    page_size: 10
+  });
+  const results = (searchResult.results ?? []).filter((result) => result.object === "page");
+
+  return (
+    results.find((result) => normalizePageTitle(getNotionPageTitle(result) ?? "") === normalizedTitle) ??
+    results[0]
+  );
+}
+
+async function appendBlocksToPage(
+  accessToken: string,
+  pageId: string,
+  children: Record<string, unknown>[]
+): Promise<void> {
+  await notionRequest<unknown>(
+    accessToken,
+    `/blocks/${pageId}/children`,
+    {
+      children
+    },
+    NOTION_API_VERSION,
+    "PATCH"
+  );
 }
 
 async function createNotionPage(
@@ -184,13 +192,19 @@ function createLegacyDatabaseProperties(columns: string[]): Record<string, unkno
   }, {});
 }
 
-function createLegacyDatabaseRowProperties(columns: string[], rowIndex: number): Record<string, unknown> {
+function createLegacyDatabaseRowProperties(
+  columns: string[],
+  rowIndex: number,
+  values: string[] = []
+): Record<string, unknown> {
   return columns.reduce<Record<string, unknown>>((properties, column, columnIndex) => {
+    const cellValue = values[columnIndex]?.trim();
+
     properties[column] =
       columnIndex === 0
-        ? titleProperty(`Row ${rowIndex + 1}`)
+        ? titleProperty(cellValue || `Row ${rowIndex + 1}`)
         : {
-            rich_text: textRichText(" ")
+            rich_text: textRichText(cellValue || " ")
           };
 
     return properties;
@@ -199,7 +213,8 @@ function createLegacyDatabaseRowProperties(columns: string[], rowIndex: number):
 
 async function createNotionDatabase(
   accessToken: string,
-  command: ParsedNotionCommand
+  command: ParsedNotionCommand,
+  rows: string[][] = []
 ): Promise<NotionObjectResponse> {
   const parentPage = await createNotionPage(accessToken, command.title, [
     createParagraphBlock("SamovarNotes created this page as a parent for the requested database.")
@@ -219,7 +234,11 @@ async function createNotionDatabase(
     NOTION_LEGACY_DATABASE_VERSION
   );
 
-  for (let rowIndex = 0; rowIndex < command.rowCount; rowIndex += 1) {
+  const rowValues = rows.length > 0
+    ? rows
+    : Array.from({ length: command.rowCount }, (_item, rowIndex) => command.columns.map(() => `Row ${rowIndex + 1}`));
+
+  for (let rowIndex = 0; rowIndex < rowValues.length; rowIndex += 1) {
     await notionRequest<NotionObjectResponse>(
       accessToken,
       "/pages",
@@ -227,7 +246,7 @@ async function createNotionDatabase(
         parent: {
           database_id: database.id
         },
-        properties: createLegacyDatabaseRowProperties(command.columns, rowIndex)
+        properties: createLegacyDatabaseRowProperties(command.columns, rowIndex, rowValues[rowIndex] ?? [])
       },
       NOTION_LEGACY_DATABASE_VERSION
     );
@@ -248,36 +267,65 @@ export async function executeNotionChatCommand(input: NotionChatCommandInput): P
 
   try {
     const accessToken = await getNotionAccessToken();
-    const command = parseNotionCommand(message);
+    const plan = await planNotionCommand(message);
 
-    if (command.kind === "database") {
-      const database = await createNotionDatabase(accessToken, command);
+    if (plan.action === "answer") {
+      return {
+        ok: false,
+        message: plan.assistantMessage || "I need a little more detail before writing to Notion."
+      };
+    }
+
+    if (plan.action === "append_table_to_page") {
+      const targetPage = await findNotionPageByTitle(accessToken, plan.targetPageTitle);
+
+      if (!targetPage) {
+        return {
+          ok: false,
+          message: `I could not find a Notion page named "${plan.targetPageTitle}". Check the page name and that your Notion token can access it.`
+        };
+      }
+
+      await appendBlocksToPage(accessToken, targetPage.id, createPlanBlocks(plan));
 
       return createNotionSuccess(
-        `Created a Notion database with ${command.columnCount} columns and ${command.rowCount} rows.${database.url ? `\n${database.url}` : ""}`,
+        `${plan.assistantMessage || `Updated "${plan.targetPageTitle}" in Notion.`}${targetPage.url ? `\n${targetPage.url}` : ""}`,
+        targetPage.url
+      );
+    }
+
+    if (plan.action === "create_database") {
+      const command: ParsedNotionCommand = {
+        kind: "database",
+        title: plan.title || "Samovar Database",
+        rowCount: Math.max(plan.table.rows.length, 1),
+        columnCount: plan.table.columns.length,
+        columns: plan.table.columns
+      };
+      const database = await createNotionDatabase(accessToken, command, plan.table.rows);
+
+      return createNotionSuccess(
+        `${plan.assistantMessage || `Created a Notion database with ${command.columnCount} columns and ${command.rowCount} rows.`}${database.url ? `\n${database.url}` : ""}`,
         database.url
       );
     }
 
-    if (command.kind === "table") {
-      const page = await createNotionPage(accessToken, command.title, [
-        createParagraphBlock("SamovarNotes created this table from your chat command."),
-        createTableBlock(command)
-      ]);
+    if (plan.action === "create_table_page") {
+      const page = await createNotionPage(accessToken, plan.title || "Samovar Table", createPlanBlocks(plan));
 
       return createNotionSuccess(
-        `Created a Notion page with a ${command.columnCount}-column table and ${command.rowCount} rows.${page.url ? `\n${page.url}` : ""}`,
+        `${plan.assistantMessage || `Created a Notion page with a ${plan.table.columns.length}-column table and ${plan.table.rows.length} rows.`}${page.url ? `\n${page.url}` : ""}`,
         page.url
       );
     }
 
-    const page = await createNotionPage(accessToken, command.title);
+    const page = await createNotionPage(accessToken, plan.title || "Samovar Page", plan.paragraphs.map(createParagraphBlock));
 
-    return createNotionSuccess(`Created an empty Notion page.${page.url ? `\n${page.url}` : ""}`, page.url);
+    return createNotionSuccess(`${plan.assistantMessage || "Created a Notion page."}${page.url ? `\n${page.url}` : ""}`, page.url);
   } catch (error) {
     return {
       ok: false,
-      message: mapNotionError(error)
+      message: mapExecutionError(error)
     };
   }
 }
