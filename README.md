@@ -8,8 +8,9 @@ Open-source Electron desktop app for turning prompts into Notion pages, tables, 
 - Bring-your-own-keys setup screen.
 - Local encrypted storage for user tokens through Electron `safeStorage` when available.
 - No hosted auth service, browser sign-in, or manual tunnel setup.
-- OpenAI-planned Notion commands:
+- OpenAI tool-calling agent for Notion commands:
   - understand natural-language prompts instead of static keyword parsing
+  - call app-owned Notion tools through the Responses API function-calling loop
   - create an empty page
   - create a page with a table
   - find an existing page by title and append a researched table
@@ -40,7 +41,7 @@ npm run start:dev
 
 Optional development overrides can be placed in `.env`, using `.env.example` as a template. The packaged app does not require `.env`.
 
-Chat planning and web research use the saved OpenAI model. Pick a model that supports the Responses API with web search. Voice input uses the saved OpenAI API key and the `gpt-4o-mini-transcribe` model by default. Developers can override it with `OPENAI_TRANSCRIPTION_MODEL`.
+Chat execution and web research use the saved OpenAI model. Pick a model that supports the Responses API with function calling and web search. Voice input uses the saved OpenAI API key and the `gpt-4o-mini-transcribe` model by default. Developers can override it with `OPENAI_TRANSCRIPTION_MODEL`.
 
 ## Build
 

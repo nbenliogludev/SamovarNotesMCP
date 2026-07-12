@@ -118,7 +118,7 @@ export function SettingsScreen({
             placeholder="gpt-4.1-mini"
           />
           <span className="field-help">
-            This model understands chat prompts and performs web research. Use a model that supports the Responses API with web search.
+            This model understands chat prompts, calls Notion tools, and performs web research. Use a model that supports Responses API function calling and web search.
           </span>
         </label>
 
