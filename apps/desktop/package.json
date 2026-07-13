@@ -27,6 +27,9 @@
     "asar": true,
     "mac": {
       "category": "public.app-category.productivity",
+      "extendInfo": {
+        "NSMicrophoneUsageDescription": "SamovarNotes uses the microphone to record voice prompts and turn them into text."
+      },
       "identity": null,
       "target": [
         "dmg"

@@ -117,7 +117,9 @@ export function SettingsScreen({
             onChange={(event) => onChange({ openAiModel: event.target.value })}
             placeholder="gpt-4.1-mini"
           />
-          <span className="field-help">Use the default for now unless you know which OpenAI model you want to call.</span>
+          <span className="field-help">
+            This model understands chat prompts, calls Notion tools, and performs web research. Use a model that supports Responses API function calling and web search.
+          </span>
         </label>
 
         <label>

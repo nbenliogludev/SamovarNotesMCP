@@ -2,8 +2,9 @@ import { app, ipcMain, shell } from "electron";
 import { APP_NAME, APP_SUBTITLE } from "./config";
 import { testConnections } from "./connectionTest";
 import { executeNotionChatCommand } from "./notion/commands";
+import { transcribeAudio } from "./openai/transcription";
 import { getPublicConnectionSettings, updateConnectionSettings } from "./settingsStore";
-import type { NotionChatCommandInput, SaveConnectionSettingsInput } from "./types";
+import type { AudioTranscriptionInput, NotionChatCommandInput, SaveConnectionSettingsInput } from "./types";
 
 export function registerIpcHandlers(): void {
   ipcMain.handle("app:get-info", () => ({
@@ -36,5 +37,9 @@ export function registerIpcHandlers(): void {
 
   ipcMain.handle("notion:execute-chat-command", async (_event, input: NotionChatCommandInput) =>
     executeNotionChatCommand(input)
+  );
+
+  ipcMain.handle("audio:transcribe", async (_event, input: AudioTranscriptionInput) =>
+    transcribeAudio(input)
   );
 }

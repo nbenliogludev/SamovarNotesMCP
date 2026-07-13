@@ -855,7 +855,7 @@ dd {
 
 .chat-composer {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 42px;
+  grid-template-columns: minmax(0, 1fr) 42px 42px;
   gap: 10px;
   width: min(760px, 100%);
   padding: 10px;
@@ -888,6 +888,7 @@ dd {
   box-shadow: none;
 }
 
+.voice-button,
 .send-button {
   display: grid;
   width: 42px;
@@ -900,11 +901,124 @@ dd {
   border-radius: 8px;
 }
 
+.voice-button {
+  align-self: end;
+  color: var(--accent-teal);
+  background: var(--surface-subtle);
+  border: 1px solid var(--line);
+}
+
+.voice-button.is-active {
+  color: #091017;
+  background: var(--accent-blue);
+  border-color: var(--accent-blue);
+}
+
+.voice-button:not(:disabled):hover {
+  border-color: var(--accent-teal);
+}
+
 .send-button:not(:disabled):hover {
   background: var(--accent-teal);
+}
+
+.spin-icon {
+  animation: spin 900ms linear infinite;
+}
+
+.voice-recorder {
+  display: grid;
+  grid-column: 1 / -1;
+  gap: 10px;
+  padding: 12px;
+  color: var(--text);
+  background: var(--surface-subtle);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+.voice-recorder.is-error {
+  border-color: rgba(242, 139, 130, 0.55);
+}
+
+.voice-recorder-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.voice-recorder-header strong {
+  color: var(--accent-green);
+  font-variant-numeric: tabular-nums;
+}
+
+.voice-waveform {
+  display: grid;
+  height: 44px;
+  grid-template-columns: repeat(28, minmax(2px, 1fr));
+  align-items: center;
+  gap: 4px;
+  padding: 0 2px;
+}
+
+.voice-waveform span {
+  display: block;
+  height: 36px;
+  transform-origin: center;
+  background: linear-gradient(180deg, var(--accent-blue), var(--accent-teal));
+  border-radius: 999px;
+  transition: transform 80ms linear;
+}
+
+.voice-recorder p {
+  color: var(--accent-red);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+.voice-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.voice-action-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 34px;
+  padding: 0 11px;
+  color: var(--text);
+  background: var(--surface-elevated);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.voice-action-button.is-primary {
+  color: #091017;
+  background: var(--accent-green);
+  border-color: var(--accent-green);
+}
+
+.voice-action-button:not(:disabled):hover {
+  border-color: var(--accent-teal);
 }
 
 .compact-action {
   width: fit-content;
   padding: 0 14px;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
 }

@@ -10,12 +10,14 @@ type ChatScreenProps = {
   copiedMessageId: string | null;
   isComposerDisabled: boolean;
   isResponding: boolean;
+  isVoiceDisabled: boolean;
   messages: ChatMessage[];
   onChatInputChange: (value: string) => void;
   onComposerKeyDown: KeyboardEventHandler<HTMLTextAreaElement>;
   onCopyMessage: (message: ChatMessage) => void;
   onSamplePrompt: () => void;
   onSubmit: FormEventHandler<HTMLFormElement>;
+  onVoiceTranscript: (value: string) => void;
 };
 
 export function ChatScreen({
@@ -23,12 +25,14 @@ export function ChatScreen({
   copiedMessageId,
   isComposerDisabled,
   isResponding,
+  isVoiceDisabled,
   messages,
   onChatInputChange,
   onComposerKeyDown,
   onCopyMessage,
   onSamplePrompt,
-  onSubmit
+  onSubmit,
+  onVoiceTranscript
 }: ChatScreenProps) {
   const hasMessages = messages.length > 0;
 
@@ -52,9 +56,11 @@ export function ChatScreen({
             disabled={isComposerDisabled}
             placement="center"
             value={chatInput}
+            voiceDisabled={isVoiceDisabled}
             onChange={onChatInputChange}
             onKeyDown={onComposerKeyDown}
             onSubmit={onSubmit}
+            onVoiceTranscript={onVoiceTranscript}
           />
           <button className="secondary-button compact-action" type="button" onClick={onSamplePrompt}>
             Try sample prompt
@@ -67,9 +73,11 @@ export function ChatScreen({
           disabled={isComposerDisabled}
           placement="bottom"
           value={chatInput}
+          voiceDisabled={isVoiceDisabled}
           onChange={onChatInputChange}
           onKeyDown={onComposerKeyDown}
           onSubmit={onSubmit}
+          onVoiceTranscript={onVoiceTranscript}
         />
       ) : null}
     </div>
