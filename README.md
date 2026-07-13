@@ -11,10 +11,15 @@ Open-source Electron desktop app for turning prompts into Notion pages, tables, 
 - OpenAI tool-calling agent for Notion commands:
   - understand natural-language prompts instead of static keyword parsing
   - call app-owned Notion tools through the Responses API function-calling loop
+  - search and read existing Notion pages, page blocks, databases, and rows
   - create an empty page
+  - create child pages inside existing pages
   - create a page with a table
-  - find an existing page by title and append a researched table
+  - append text blocks, headings, lists, todos, and researched tables to existing pages
   - create a database
+  - add rows to existing databases
+  - update or archive text blocks and database rows when the target id is known
+  - rename or archive pages when explicitly requested
 - Voice input in the chat composer: record a short prompt, transcribe it with OpenAI, and insert the text before sending.
 - OpenAI web research through the Responses API for prompts that ask for current facts, best/top lists, places, prices, or external information.
 

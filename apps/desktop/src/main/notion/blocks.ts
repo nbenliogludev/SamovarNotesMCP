@@ -1,12 +1,38 @@
 import type { ParsedNotionCommand } from "../types";
 import { textRichText } from "./richText";
 
+export type NotionTextBlockType =
+  | "paragraph"
+  | "heading_1"
+  | "heading_2"
+  | "heading_3"
+  | "bulleted_list_item"
+  | "numbered_list_item"
+  | "to_do";
+
 export function createParagraphBlock(content: string): Record<string, unknown> {
+  return createTextBlock("paragraph", content);
+}
+
+export function createTextBlock(type: NotionTextBlockType, content: string): Record<string, unknown> {
+  const richText = textRichText(content || " ");
+
+  if (type === "to_do") {
+    return {
+      object: "block",
+      type,
+      [type]: {
+        rich_text: richText,
+        checked: false
+      }
+    };
+  }
+
   return {
     object: "block",
-    type: "paragraph",
-    paragraph: {
-      rich_text: textRichText(content)
+    type,
+    [type]: {
+      rich_text: richText
     }
   };
 }
